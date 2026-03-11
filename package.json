@@ -1,0 +1,25 @@
+{
+  "name": "claweb",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "description": "OpenClaw Web Channel plugin (MVP-0 text closed loop)",
+  "main": "index.ts",
+  "openclaw": {
+    "extensions": [
+      "./index.ts"
+    ]
+  },
+  "scripts": {
+    "typecheck": "tsc -p tsconfig.json --noEmit"
+  },
+  "dependencies": {
+    "openclaw": "^2026.3.7",
+    "ws": "^8.19.0"
+  },
+  "devDependencies": {
+    "@types/node": "^22.13.4",
+    "@types/ws": "^8.5.14",
+    "typescript": "^5.8.2"
+  }
+}

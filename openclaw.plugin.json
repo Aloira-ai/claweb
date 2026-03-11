@@ -1,0 +1,9 @@
+{
+  "id": "claweb",
+  "channels": ["claweb"],
+  "configSchema": {
+    "type": "object",
+    "additionalProperties": false,
+    "properties": {}
+  }
+}

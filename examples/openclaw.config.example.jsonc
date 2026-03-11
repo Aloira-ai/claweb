@@ -1,0 +1,17 @@
+{
+  // Add under your OpenClaw profile config.
+  "channels": {
+    "claweb": {
+      "accounts": {
+        "default": {
+          "enabled": true,
+          "listenHost": "127.0.0.1",
+          "listenPort": 18999,
+          "authTokenFile": "/path/to/your/claweb.token"
+          // Alternative for local experiments only:
+          // "authToken": "replace-with-non-committed-secret"
+        }
+      }
+    }
+  }
+}
