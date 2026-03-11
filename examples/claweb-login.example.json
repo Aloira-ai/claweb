@@ -1,0 +1,20 @@
+{
+  "identities": {
+    "guest-a": {
+      "displayName": "Guest A",
+      "passphrase": "replace-with-local-passphrase-a",
+      "userId": "user-guest-a",
+      "roomId": "room-main",
+      "token": "replace-with-claweb-token-a",
+      "clientId": "guest-a-fixed"
+    },
+    "guest-b": {
+      "displayName": "Guest B",
+      "passphrase": "replace-with-local-passphrase-b",
+      "userId": "user-guest-b",
+      "roomId": "room-main",
+      "token": "replace-with-claweb-token-b",
+      "clientId": "guest-b-fixed"
+    }
+  }
+}

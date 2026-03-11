@@ -1,0 +1,54 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>CLAWeb Entry</title>
+  <link rel="stylesheet" href="/claweb/style.css" />
+</head>
+<body>
+  <main class="app">
+    <section id="login-panel" class="panel gate-panel">
+      <header>
+        <h1>Enter CLAWeb</h1>
+        <p class="subtitle">Use your passphrase to restore the fixed session route.</p>
+      </header>
+
+      <div class="row">
+        <label for="passphrase-input">Passphrase</label>
+        <input id="passphrase-input" type="password" autocomplete="current-password" placeholder="Enter passphrase" />
+      </div>
+
+      <div class="actions single">
+        <button id="login-btn" type="button">Continue</button>
+      </div>
+
+      <p id="login-error" class="error" role="status" aria-live="polite"></p>
+    </section>
+
+    <section id="chat-panel" class="panel hidden">
+      <header class="topbar">
+        <div>
+          <h2>CLAWeb Chat</h2>
+          <p id="session-desc" class="subtitle"></p>
+        </div>
+        <div id="conn-status" class="status status-offline">Offline</div>
+      </header>
+
+      <section id="messages" class="messages" aria-live="polite"></section>
+
+      <footer class="composer">
+        <textarea id="message-input" rows="2" placeholder="Enter sends, Shift+Enter adds newline"></textarea>
+        <button id="send-btn" type="button">Send</button>
+      </footer>
+
+      <div class="actions secondary">
+        <button id="disconnect-btn" type="button" class="ghost">Disconnect</button>
+        <button id="logout-btn" type="button" class="ghost">Logout</button>
+      </div>
+    </section>
+  </main>
+
+  <script src="/claweb/app.js"></script>
+</body>
+</html>
