@@ -197,7 +197,7 @@ function renderSearchResults(results, query) {
       return state.session?.displayName || state.session?.identity || "You";
     }
     if (role === "assistant") {
-      return "Aloira";
+      return window.CLAWEB_ASSISTANT_NAME || "Assistant";
     }
     return "System";
   };
