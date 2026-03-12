@@ -646,7 +646,7 @@ const server = http.createServer(async (req, res) => {
 // --- WS server (browser-facing) ---
 
 const ASSISTANT_FRAME_COALESCE_MS = 900;
-const ASSISTANT_MEDIA_ONLY_COALESCE_MS = 8000;
+const ASSISTANT_MEDIA_ONLY_COALESCE_MS = 20000;
 
 const wss = new WebSocketServer({ server, path: "/ws" });
 
