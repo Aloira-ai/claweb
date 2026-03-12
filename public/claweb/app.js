@@ -782,6 +782,36 @@ async function loadImageElement(sourceUrl) {
   return img;
 }
 
+async function loadImageSource(sourceFile, sourceUrl) {
+  if (sourceFile && typeof createImageBitmap === "function") {
+    try {
+      const bitmap = await createImageBitmap(sourceFile);
+      return {
+        drawable: bitmap,
+        width: Number(bitmap.width || 0),
+        height: Number(bitmap.height || 0),
+        close: () => {
+          try {
+            bitmap.close();
+          } catch {
+            // ignore
+          }
+        },
+      };
+    } catch {
+      // fall through to Image decode
+    }
+  }
+
+  const img = await loadImageElement(sourceUrl);
+  return {
+    drawable: img,
+    width: Number(img.naturalWidth || img.width || 0),
+    height: Number(img.naturalHeight || img.height || 0),
+    close: () => {},
+  };
+}
+
 async function compressImageSource(opts = {}) {
   const sourceMime = String(opts.sourceMime || "").toLowerCase();
   const sourceName = String(opts.sourceName || "").toLowerCase();
@@ -794,16 +824,41 @@ async function compressImageSource(opts = {}) {
     /screenshot|screen shot|snip|截屏|截图|屏幕快照/.test(sourceName);
 
   const isHuge = !!srcBytes && srcBytes > 8 * 1024 * 1024;
-  const maxSide = Number(opts.maxSide || (looksLikeScreenshot ? (isHuge ? 1800 : 2200) : (isHuge ? 1280 : 1600)));
+  const isVeryHuge = !!srcBytes && srcBytes > 14 * 1024 * 1024;
+  const maxSide = Number(
+    opts.maxSide ||
+      (looksLikeScreenshot
+        ? isVeryHuge
+          ? 1440
+          : isHuge
+            ? 1800
+            : 2200
+        : isVeryHuge
+          ? 1080
+          : isHuge
+            ? 1280
+            : 1600),
+  );
   const targetMaxBytes = Number(
-    opts.targetMaxBytes || (looksLikeScreenshot ? (isHuge ? 1800 * 1024 : 2200 * 1024) : (isHuge ? 900 * 1024 : 1200 * 1024)),
+    opts.targetMaxBytes ||
+      (looksLikeScreenshot
+        ? isVeryHuge
+          ? 1400 * 1024
+          : isHuge
+            ? 1800 * 1024
+            : 2200 * 1024
+        : isVeryHuge
+          ? 700 * 1024
+          : isHuge
+            ? 900 * 1024
+            : 1200 * 1024),
   );
   const preferWebp = opts.preferWebp !== false;
 
   const sourceUrl = sourceFile ? URL.createObjectURL(sourceFile) : inputDataUrl;
-  let img;
+  let loaded;
   try {
-    img = await loadImageElement(sourceUrl);
+    loaded = await loadImageSource(sourceFile, sourceUrl);
   } finally {
     if (sourceFile) {
       try {
@@ -814,8 +869,8 @@ async function compressImageSource(opts = {}) {
     }
   }
 
-  const sw = Number(img.naturalWidth || img.width || 0);
-  const sh = Number(img.naturalHeight || img.height || 0);
+  const sw = Number(loaded?.width || 0);
+  const sh = Number(loaded?.height || 0);
   if (!sw || !sh) throw new Error("bad_image_dimensions");
 
   const scale = Math.min(1, maxSide / Math.max(sw, sh));
@@ -843,7 +898,12 @@ async function compressImageSource(opts = {}) {
   canvas.height = dh;
   const ctx = canvas.getContext("2d", { alpha: true });
   if (!ctx) throw new Error("no_canvas_ctx");
-  ctx.drawImage(img, 0, 0, dw, dh);
+  ctx.drawImage(loaded.drawable, 0, 0, dw, dh);
+  try {
+    loaded.close?.();
+  } catch {
+    // ignore
+  }
 
   const candidates = [];
 
@@ -991,10 +1051,11 @@ function setPendingImage(file, dataUrl) {
         // ignore
       }
     })
-    .catch(() => {
+    .catch((err) => {
       if (state.pendingImage === current) current.compressing = false;
       if (state.pendingImage === current && el.imageHint) {
-        el.imageHint.textContent = "压缩失败，发送时将回退原图";
+        const msg = String(err?.message || err || "compress_failed");
+        el.imageHint.textContent = `压缩失败，发送时将回退原图（${msg}）`;
       }
     });
 }
