@@ -742,30 +742,77 @@ function dataUrlByteLength(dataUrl) {
     const idx = String(dataUrl || "").indexOf(",");
     if (idx < 0) return null;
     const b64 = String(dataUrl).slice(idx + 1);
-    // base64 size ≈ 3/4 length
     return Math.floor((b64.length * 3) / 4);
   } catch {
     return null;
   }
 }
 
-async function compressImageDataUrl(inputDataUrl, opts = {}) {
+async function blobToDataUrl(blob) {
+  return new Promise((resolve, reject) => {
+    const reader = new FileReader();
+    reader.onload = () => resolve(reader.result);
+    reader.onerror = reject;
+    reader.readAsDataURL(blob);
+  });
+}
+
+async function canvasToBlob(canvas, mime, quality) {
+  return new Promise((resolve, reject) => {
+    try {
+      canvas.toBlob(
+        (blob) => {
+          if (blob) resolve(blob);
+          else reject(new Error("to_blob_failed"));
+        },
+        mime,
+        quality,
+      );
+    } catch (e) {
+      reject(e);
+    }
+  });
+}
+
+async function loadImageElement(sourceUrl) {
+  const img = new Image();
+  img.decoding = "async";
+  img.src = String(sourceUrl || "");
+  await img.decode();
+  return img;
+}
+
+async function compressImageSource(opts = {}) {
   const sourceMime = String(opts.sourceMime || "").toLowerCase();
   const sourceName = String(opts.sourceName || "").toLowerCase();
-  const srcBytes = dataUrlByteLength(inputDataUrl);
+  const inputDataUrl = String(opts.inputDataUrl || "");
+  const sourceFile = opts.sourceFile || null;
+  const srcBytes = Number(sourceFile?.size || dataUrlByteLength(inputDataUrl) || 0) || null;
 
   const looksLikeScreenshot =
     sourceMime === "image/png" ||
     /screenshot|screen shot|snip|截屏|截图|屏幕快照/.test(sourceName);
 
-  const maxSide = Number(opts.maxSide || (looksLikeScreenshot ? 2200 : 1600));
-  const targetMaxBytes = Number(opts.targetMaxBytes || (looksLikeScreenshot ? 2200 * 1024 : 1200 * 1024));
+  const isHuge = !!srcBytes && srcBytes > 8 * 1024 * 1024;
+  const maxSide = Number(opts.maxSide || (looksLikeScreenshot ? (isHuge ? 1800 : 2200) : (isHuge ? 1280 : 1600)));
+  const targetMaxBytes = Number(
+    opts.targetMaxBytes || (looksLikeScreenshot ? (isHuge ? 1800 * 1024 : 2200 * 1024) : (isHuge ? 900 * 1024 : 1200 * 1024)),
+  );
   const preferWebp = opts.preferWebp !== false;
 
-  const img = new Image();
-  img.decoding = "async";
-  img.src = String(inputDataUrl || "");
-  await img.decode();
+  const sourceUrl = sourceFile ? URL.createObjectURL(sourceFile) : inputDataUrl;
+  let img;
+  try {
+    img = await loadImageElement(sourceUrl);
+  } finally {
+    if (sourceFile) {
+      try {
+        URL.revokeObjectURL(sourceUrl);
+      } catch {
+        // ignore
+      }
+    }
+  }
 
   const sw = Number(img.naturalWidth || img.width || 0);
   const sh = Number(img.naturalHeight || img.height || 0);
@@ -775,8 +822,6 @@ async function compressImageDataUrl(inputDataUrl, opts = {}) {
   const dw = Math.max(1, Math.round(sw * scale));
   const dh = Math.max(1, Math.round(sh * scale));
 
-  // If screenshot-like input is already reasonably small and doesn't need downscale,
-  // keep the original to avoid OCR/text sharpness loss.
   if (looksLikeScreenshot && scale === 1 && srcBytes != null && srcBytes <= targetMaxBytes) {
     return {
       dataUrl: inputDataUrl,
@@ -802,15 +847,14 @@ async function compressImageDataUrl(inputDataUrl, opts = {}) {
 
   const candidates = [];
 
-  // Screenshot-like images: try lossless resize-preserving PNG first.
   if (looksLikeScreenshot) {
     try {
-      const pngOut = canvas.toDataURL("image/png");
+      const pngBlob = await canvasToBlob(canvas, "image/png");
       candidates.push({
-        dataUrl: pngOut,
+        blob: pngBlob,
         mime: "image/png",
         quality: null,
-        bytes: dataUrlByteLength(pngOut),
+        bytes: pngBlob.size,
         strategy: "png-resize",
       });
     } catch {
@@ -822,12 +866,12 @@ async function compressImageDataUrl(inputDataUrl, opts = {}) {
   const qualities = looksLikeScreenshot ? [0.92, 0.88, 0.84, 0.8] : [0.86, 0.82, 0.78, 0.72, 0.65, 0.58];
 
   for (const q of qualities) {
-    const out = canvas.toDataURL(lossyMime, q);
+    const blob = await canvasToBlob(canvas, lossyMime, q);
     candidates.push({
-      dataUrl: out,
+      blob,
       mime: lossyMime,
       quality: q,
-      bytes: dataUrlByteLength(out),
+      bytes: blob.size,
       strategy: looksLikeScreenshot ? "lossy-screenshot" : "lossy-photo",
     });
   }
@@ -842,7 +886,6 @@ async function compressImageDataUrl(inputDataUrl, opts = {}) {
     if (!best || c.bytes < best.bytes) best = c;
   }
 
-  // If the candidate is not materially smaller, keep original.
   if (!best || (srcBytes != null && best.bytes != null && best.bytes >= srcBytes * 0.96)) {
     return {
       dataUrl: inputDataUrl,
@@ -859,8 +902,9 @@ async function compressImageDataUrl(inputDataUrl, opts = {}) {
     };
   }
 
+  const outDataUrl = await blobToDataUrl(best.blob);
   return {
-    dataUrl: best.dataUrl,
+    dataUrl: outDataUrl,
     mime: best.mime,
     stats: {
       srcBytes,
@@ -897,7 +941,9 @@ function setPendingImage(file, dataUrl) {
   const current = state.pendingImage;
   current.compressionPromise = Promise.resolve()
     .then(async () => {
-      const res = await compressImageDataUrl(dataUrl, {
+      const res = await compressImageSource({
+        inputDataUrl: dataUrl,
+        sourceFile: current.file,
         sourceMime: current.mime,
         sourceName: current.filename,
         preferWebp: true,
