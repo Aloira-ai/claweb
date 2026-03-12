@@ -2,6 +2,7 @@
 // - serves static UI
 // - login via fixed passphrase mapping
 // - persists raw history (JSONL) with stable _idx tie-break
+// - maintains a recent snapshot cache for fast refresh restore
 // - proxies WS frames to OpenClaw claweb upstream (typically ws://127.0.0.1:18999)
 
 import http from "node:http";
@@ -34,6 +35,10 @@ const HISTORY_DIR = path.resolve(
   __dirname,
   (ENV.CLAWEB_HISTORY_DIR || "./data/history").trim(),
 );
+
+const RECENT_LIMIT = Math.max(1, Math.min(1000, Number(ENV.CLAWEB_RECENT_LIMIT || 60) || 60));
+const RECENT_TTL_DAYS = Math.max(1, Number(ENV.CLAWEB_RECENT_TTL_DAYS || 7) || 7);
+const RECENT_TTL_MS = RECENT_TTL_DAYS * 24 * 60 * 60 * 1000;
 
 const UPSTREAM_WS = (ENV.CLAWEB_UPSTREAM_WS || "ws://127.0.0.1:18999").trim();
 const UPSTREAM_TOKEN = (
@@ -96,6 +101,14 @@ function historyKey({ userId, roomId, clientId }) {
   return [safeFileSegment(userId), safeFileSegment(roomId || "direct"), safeFileSegment(clientId)].join("__");
 }
 
+function rawHistoryPath(key) {
+  return path.join(HISTORY_DIR, `${key}.jsonl`);
+}
+
+function recentSnapshotPath(key) {
+  return path.join(HISTORY_DIR, `${key}.recent.json`);
+}
+
 // --- login mapping ---
 
 let loginConfigCache = null;
@@ -147,6 +160,71 @@ function requireSession(req) {
   return sessionsByToken.get(token) || null;
 }
 
+// --- recent snapshot (cache) ---
+
+async function readRecentSnapshot(key) {
+  const filePath = recentSnapshotPath(key);
+  try {
+    const raw = await fsp.readFile(filePath, "utf8");
+    const snap = JSON.parse(raw);
+    if (!snap || typeof snap !== "object") return null;
+
+    const updatedAt = Number(snap.updatedAt || 0);
+    if (!Number.isFinite(updatedAt) || updatedAt <= 0) return null;
+    if (Date.now() - updatedAt > RECENT_TTL_MS) return null;
+
+    const recentMessages = Array.isArray(snap.recentMessages) ? snap.recentMessages : [];
+    return {
+      updatedAt,
+      cursor: snap.cursor || null,
+      recentMessages,
+    };
+  } catch {
+    return null;
+  }
+}
+
+async function writeRecentSnapshot(key, snapshot) {
+  const filePath = recentSnapshotPath(key);
+  const tmpPath = `${filePath}.tmp.${randomUUID()}`;
+  const body = JSON.stringify(snapshot);
+  await fsp.writeFile(tmpPath, body, "utf8");
+  await fsp.rename(tmpPath, filePath);
+}
+
+async function updateRecentSnapshot({ userId, roomId, clientId, record }) {
+  const key = historyKey({ userId, roomId, clientId });
+
+  const existing = (await readRecentSnapshot(key)) || {
+    updatedAt: 0,
+    cursor: null,
+    recentMessages: [],
+  };
+
+  const recent = Array.isArray(existing.recentMessages) ? existing.recentMessages.slice() : [];
+  recent.push({
+    role: record.role,
+    text: record.text,
+    ts: record.ts,
+    messageId: record.messageId,
+    _idx: record._idx,
+  });
+
+  // keep last N
+  const kept = recent.slice(-RECENT_LIMIT);
+
+  const last = kept[kept.length - 1] || null;
+  const snapshot = {
+    updatedAt: Date.now(),
+    cursor: last
+      ? { lastTs: last.ts, lastIdx: last._idx, lastMessageId: last.messageId || null }
+      : null,
+    recentMessages: kept,
+  };
+
+  await writeRecentSnapshot(key, snapshot);
+}
+
 // --- raw history ---
 
 const idxByFile = new Map();
@@ -164,7 +242,7 @@ async function initIdxForFile(filePath) {
 
 async function appendRawMessage({ userId, roomId, clientId, message }) {
   const key = historyKey({ userId, roomId, clientId });
-  const filePath = path.join(HISTORY_DIR, `${key}.jsonl`);
+  const filePath = rawHistoryPath(key);
   await initIdxForFile(filePath);
 
   const nextIdx = (idxByFile.get(filePath) || 0) + 1;
@@ -179,11 +257,34 @@ async function appendRawMessage({ userId, roomId, clientId, message }) {
   };
 
   await fsp.appendFile(filePath, JSON.stringify(record) + "\n", "utf8");
+
+  // best-effort snapshot update (cache)
+  try {
+    await updateRecentSnapshot({ userId, roomId, clientId, record });
+  } catch {
+    // ignore cache failures
+  }
 }
 
 async function loadRawHistory({ userId, roomId, clientId, limit }) {
   const key = historyKey({ userId, roomId, clientId });
-  const filePath = path.join(HISTORY_DIR, `${key}.jsonl`);
+
+  // Try snapshot first
+  const snap = await readRecentSnapshot(key);
+  if (snap && Array.isArray(snap.recentMessages) && snap.recentMessages.length > 0) {
+    const n = Math.max(0, Math.min(1000, Number(limit || 60) || 60));
+    const sorted = snap.recentMessages
+      .slice()
+      .sort((a, b) => {
+        const ta = Number(a.ts || 0);
+        const tb = Number(b.ts || 0);
+        if (ta !== tb) return ta - tb;
+        return Number(a._idx || 0) - Number(b._idx || 0);
+      });
+    return n ? sorted.slice(-n) : sorted;
+  }
+
+  const filePath = rawHistoryPath(key);
 
   let raw;
   try {
@@ -212,7 +313,27 @@ async function loadRawHistory({ userId, roomId, clientId, limit }) {
   });
 
   const n = Math.max(0, Math.min(1000, Number(limit || 60) || 60));
-  return n ? messages.slice(-n) : messages;
+  const out = n ? messages.slice(-n) : messages;
+
+  // Warm snapshot best-effort
+  if (out.length > 0) {
+    try {
+      const last = out[out.length - 1];
+      await writeRecentSnapshot(key, {
+        updatedAt: Date.now(),
+        cursor: {
+          lastTs: Number(last.ts || 0),
+          lastIdx: Number(last._idx || 0),
+          lastMessageId: last.messageId || null,
+        },
+        recentMessages: out.slice(-RECENT_LIMIT),
+      });
+    } catch {
+      // ignore
+    }
+  }
+
+  return out;
 }
 
 // --- static serving ---
@@ -323,7 +444,7 @@ const server = http.createServer(async (req, res) => {
 
 const wss = new WebSocketServer({ server, path: "/ws" });
 
-wss.on("connection", (clientWs, req) => {
+wss.on("connection", (clientWs) => {
   const state = {
     authed: false,
     session: null,
@@ -381,7 +502,6 @@ wss.on("connection", (clientWs, req) => {
       }
 
       if (frame.type === "ready") {
-        // Mirror readiness to client
         sendClient(frame);
         return;
       }
@@ -392,9 +512,9 @@ wss.on("connection", (clientWs, req) => {
       }
 
       if (frame.type === "message") {
-        // Persist assistant message (detached-safe)
         const messageId = String(frame.id || "").trim() || null;
         const text = String(frame.text || "").trim();
+
         if (messageId && state.inFlight.has(messageId)) {
           state.inFlight.delete(messageId);
         }
@@ -413,7 +533,6 @@ wss.on("connection", (clientWs, req) => {
           });
         }
 
-        // Best-effort forward to client
         sendClient(frame);
         scheduleCloseIfIdle();
         return;
@@ -421,7 +540,6 @@ wss.on("connection", (clientWs, req) => {
     });
 
     upstream.on("close", () => {
-      // best-effort notify
       sendClient({ type: "error", message: "upstream_closed" });
       scheduleCloseIfIdle();
     });
@@ -441,7 +559,6 @@ wss.on("connection", (clientWs, req) => {
       return;
     }
 
-    // First frame: hello
     if (!state.authed) {
       if (!frame || frame.type !== "hello") {
         sendClient({ type: "error", message: "first frame must be hello" });
@@ -460,7 +577,6 @@ wss.on("connection", (clientWs, req) => {
       state.authed = true;
       state.session = session;
       ensureUpstream();
-      // Wait for upstream ready to mirror. (If upstream is slow, client will see connecting.)
       return;
     }
 
@@ -470,27 +586,25 @@ wss.on("connection", (clientWs, req) => {
     }
 
     const id = String(frame.id || "").trim();
-    const text = String(frame.text || "").trim();
+    const textMsg = String(frame.text || "").trim();
     const ts = Number(frame.timestamp) || Date.now();
 
     if (!id) return sendClient({ type: "error", message: "missing id" });
-    if (!text) return sendClient({ type: "error", id, message: "text is empty" });
+    if (!textMsg) return sendClient({ type: "error", id, message: "text is empty" });
 
-    // Persist user message immediately
     await appendRawMessage({
       userId: state.session.userId,
       roomId: state.session.roomId,
       clientId: state.session.clientId,
-      message: { role: "user", text, ts, messageId: id },
+      message: { role: "user", text: textMsg, ts, messageId: id },
     });
 
     state.inFlight.add(id);
 
-    // Proxy to upstream
     try {
       ensureUpstream();
       if (state.upstream && state.upstream.readyState === WebSocket.OPEN) {
-        state.upstream.send(JSON.stringify({ type: "message", id, text, timestamp: ts }));
+        state.upstream.send(JSON.stringify({ type: "message", id, text: textMsg, timestamp: ts }));
       } else {
         sendClient({ type: "error", id, message: "upstream_not_ready" });
       }
@@ -511,4 +625,5 @@ server.listen(PORT, BIND, () => {
   console.log(`[frontdoor] login config: ${LOGIN_CONFIG_PATH}`);
   console.log(`[frontdoor] history dir: ${HISTORY_DIR}`);
   console.log(`[frontdoor] upstream ws: ${UPSTREAM_WS}`);
+  console.log(`[frontdoor] recent limit: ${RECENT_LIMIT} (ttl=${RECENT_TTL_DAYS}d)`);
 });
