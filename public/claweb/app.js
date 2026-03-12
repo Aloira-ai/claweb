@@ -54,6 +54,7 @@ const state = {
   renderedMessageKeys: new Set(),
   threads: null,
   switchTarget: null,
+  messageIndex: new Map(), // messageId -> { text, node }
 };
 
 const el = {
@@ -85,9 +86,45 @@ function setLoginError(msg = "") {
 }
 
 function addMessage(role, text, meta = "") {
+  return addMessageRich({ role, text, meta });
+}
+
+function addMessageRich({ role, text, meta = "", messageId = null, replyTo = null }) {
   const node = document.createElement("div");
   node.className = `msg msg-${role}`;
-  node.textContent = text;
+
+  if (messageId) node.dataset.messageId = messageId;
+
+  const normalizedReplyTo = normalizeId(replyTo);
+  if (normalizedReplyTo) {
+    const quote = document.createElement("div");
+    quote.className = "quote";
+    quote.tabIndex = 0;
+
+    const quoted = state.messageIndex.get(normalizedReplyTo);
+    const quotedText = quoted?.text ? String(quoted.text) : "(message not in view)";
+
+    quote.textContent = `Reply to: ${quotedText.slice(0, 140)}`;
+
+    const jump = () => {
+      const target = state.messageIndex.get(normalizedReplyTo)?.node;
+      if (target && typeof target.scrollIntoView === "function") {
+        target.scrollIntoView({ block: "center", behavior: "smooth" });
+      }
+    };
+
+    quote.addEventListener("click", jump);
+    quote.addEventListener("keydown", (e) => {
+      if (e.key === "Enter" || e.key === " ") jump();
+    });
+
+    node.appendChild(quote);
+  }
+
+  const body = document.createElement("div");
+  body.className = "msg-body";
+  body.textContent = text;
+  node.appendChild(body);
 
   if (meta) {
     const metaNode = document.createElement("div");
@@ -217,7 +254,8 @@ function normalizeIncomingMessage(frame) {
     .find(Boolean);
 
   const frameId = normalizeId(frame.id || frame.messageId);
-  const replyIds = [frame.replyTo, frame.parentId].map(normalizeId).filter(Boolean);
+  const replyTo = normalizeId(frame.replyTo || frame.parentId);
+  const replyIds = [replyTo].map(normalizeId).filter(Boolean);
   const linkedPendingId = [frameId, ...replyIds].find((id) => id && state.pendingById.has(id)) || null;
   const linkedPending = linkedPendingId ? state.pendingById.get(linkedPendingId) : null;
 
@@ -232,13 +270,25 @@ function normalizeIncomingMessage(frame) {
     messageId: frameId,
     ts: normalizeTs(frame.ts || frame.timestamp),
     pendingId: linkedPendingId,
+    replyTo: replyTo || null,
   };
 }
 
 function renderNormalizedMessage(message) {
   if (!message) return false;
   if (isMessageRendered(message)) return false;
-  addMessage(message.role, message.text);
+
+  const node = addMessageRich({
+    role: message.role,
+    text: message.text,
+    messageId: message.messageId,
+    replyTo: message.replyTo,
+  });
+
+  if (message.messageId) {
+    state.messageIndex.set(message.messageId, { text: message.text, node });
+  }
+
   markMessageRendered(message);
   return true;
 }
@@ -278,6 +328,7 @@ async function loadRecentHistory() {
         role: mapRole(item?.role),
         text: item?.text,
         messageId: item?.messageId,
+        replyTo: item?.replyTo,
         ts: item?.ts,
       });
       if (renderNormalizedMessage(normalized)) restored += 1;

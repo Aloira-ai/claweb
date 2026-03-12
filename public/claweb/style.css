@@ -270,6 +270,25 @@ button:disabled {
   word-break: break-word;
 }
 
+.msg-body {
+  white-space: pre-wrap;
+}
+
+.quote {
+  font-size: 12px;
+  color: var(--muted);
+  border-left: 3px solid #b8cdf8;
+  padding: 6px 10px;
+  margin-bottom: 6px;
+  background: rgba(184, 205, 248, 0.25);
+  border-radius: 10px;
+  cursor: pointer;
+}
+
+.quote:focus {
+  outline: 2px solid #b8cdf8;
+}
+
 .msg-user {
   align-self: flex-end;
   background: #e9f0ff;
