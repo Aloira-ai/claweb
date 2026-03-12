@@ -192,14 +192,24 @@ function renderSearchResults(results, query) {
     return;
   }
 
+  const nameOf = (role) => {
+    if (role === "user") {
+      return state.session?.displayName || state.session?.identity || "You";
+    }
+    if (role === "assistant") {
+      return "Aloira";
+    }
+    return "System";
+  };
+
   const items = results
     .slice(0, 20)
     .map((r) => {
-      const role = escapeHtml(r.role);
+      const who = escapeHtml(nameOf(r.role));
       const snippet = escapeHtml(r.text);
       return `
         <div class="search-hit" data-mid="${escapeHtml(r.messageId)}">
-          <div class="search-hit-title">${role}</div>
+          <div class="search-hit-title">${who}</div>
           <div class="search-hit-snippet">${snippet}</div>
         </div>
       `.trim();
