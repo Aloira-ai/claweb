@@ -56,6 +56,35 @@ if (!UPSTREAM_TOKEN) {
 
 await fsp.mkdir(HISTORY_DIR, { recursive: true });
 
+// --- minimal observability ---
+const LOG_LEVEL = (ENV.CLAWEB_LOG_LEVEL || "info").trim().toLowerCase();
+const LOG_JSON = String(ENV.CLAWEB_LOG_JSON || "").trim() === "1";
+
+const levels = { debug: 10, info: 20, warn: 30, error: 40 };
+const minLevel = levels[LOG_LEVEL] ?? 20;
+
+function log(level, message, fields = {}) {
+  const lv = levels[level] ?? 20;
+  if (lv < minLevel) return;
+  const payload = {
+    ts: new Date().toISOString(),
+    level,
+    msg: message,
+    ...fields,
+  };
+  if (LOG_JSON) {
+    console.log(JSON.stringify(payload));
+  } else {
+    const extra = Object.keys(fields).length ? ` ${JSON.stringify(fields)}` : "";
+    console.log(`[frontdoor] ${level.toUpperCase()} ${message}${extra}`);
+  }
+}
+
+const metrics = {
+  history: { snapshotHit: 0, snapshotMiss: 0, rawFallback: 0, warmSnapshot: 0 },
+  ws: { upstreamOpen: 0, upstreamClose: 0, upstreamError: 0, upstreamReady: 0, upstreamMessage: 0 },
+};
+
 function json(res, status, obj) {
   const body = Buffer.from(JSON.stringify(obj));
   res.writeHead(status, {
@@ -272,6 +301,7 @@ async function loadRawHistory({ userId, roomId, clientId, limit }) {
   // Try snapshot first
   const snap = await readRecentSnapshot(key);
   if (snap && Array.isArray(snap.recentMessages) && snap.recentMessages.length > 0) {
+    metrics.history.snapshotHit += 1;
     const n = Math.max(0, Math.min(1000, Number(limit || 60) || 60));
     const sorted = snap.recentMessages
       .slice()
@@ -284,12 +314,15 @@ async function loadRawHistory({ userId, roomId, clientId, limit }) {
     return n ? sorted.slice(-n) : sorted;
   }
 
+  metrics.history.snapshotMiss += 1;
+
   const filePath = rawHistoryPath(key);
 
   let raw;
   try {
     raw = await fsp.readFile(filePath, "utf8");
   } catch {
+    metrics.history.rawFallback += 1;
     return [];
   }
 
@@ -319,6 +352,7 @@ async function loadRawHistory({ userId, roomId, clientId, limit }) {
   if (out.length > 0) {
     try {
       const last = out[out.length - 1];
+      metrics.history.warmSnapshot += 1;
       await writeRecentSnapshot(key, {
         updatedAt: Date.now(),
         cursor: {
@@ -412,6 +446,12 @@ const server = http.createServer(async (req, res) => {
 
     const [identity, entry] = matches[0];
     const session = buildSession({ identity, entry });
+    log("info", "login_ok", {
+      identity: session.identity,
+      userId: session.userId,
+      roomId: session.roomId,
+      clientId: session.clientId,
+    });
     return json(res, 200, { ok: true, session });
   }
 
@@ -425,6 +465,15 @@ const server = http.createServer(async (req, res) => {
     const limit = Number(url.searchParams.get("limit") || 60);
 
     const messages = await loadRawHistory({ userId, roomId, clientId, limit });
+    log("debug", "history_ok", {
+      userId,
+      roomId,
+      clientId,
+      limit,
+      returned: messages.length,
+      snapshotHit: metrics.history.snapshotHit,
+      snapshotMiss: metrics.history.snapshotMiss,
+    });
     return json(res, 200, { ok: true, messages });
   }
 
@@ -444,7 +493,8 @@ const server = http.createServer(async (req, res) => {
 
 const wss = new WebSocketServer({ server, path: "/ws" });
 
-wss.on("connection", (clientWs) => {
+wss.on("connection", (clientWs, req) => {
+  const remote = req?.socket?.remoteAddress || "unknown";
   const state = {
     authed: false,
     session: null,
@@ -483,6 +533,13 @@ wss.on("connection", (clientWs) => {
     state.upstream = upstream;
 
     upstream.on("open", () => {
+      metrics.ws.upstreamOpen += 1;
+      log("info", "upstream_open", {
+        userId: state.session.userId,
+        roomId: state.session.roomId,
+        clientId: state.session.clientId,
+        upstream: UPSTREAM_WS,
+      });
       const hello = {
         type: "hello",
         token: UPSTREAM_TOKEN,
@@ -502,6 +559,12 @@ wss.on("connection", (clientWs) => {
       }
 
       if (frame.type === "ready") {
+        metrics.ws.upstreamReady += 1;
+        log("debug", "upstream_ready", {
+          userId: state.session.userId,
+          roomId: state.session.roomId,
+          clientId: state.session.clientId,
+        });
         sendClient(frame);
         return;
       }
@@ -512,6 +575,8 @@ wss.on("connection", (clientWs) => {
       }
 
       if (frame.type === "message") {
+        metrics.ws.upstreamMessage += 1;
+
         // Upstream CLAWeb currently tends to reuse the user turn id as `frame.id`.
         // To avoid id collisions (turnId vs messageId), we mint a new assistant message id
         // and attach `replyTo` back to the original turn id.
@@ -550,12 +615,27 @@ wss.on("connection", (clientWs) => {
       }
     });
 
-    upstream.on("close", () => {
+    upstream.on("close", (code, reason) => {
+      metrics.ws.upstreamClose += 1;
+      log("warn", "upstream_close", {
+        userId: state.session.userId,
+        roomId: state.session.roomId,
+        clientId: state.session.clientId,
+        code,
+        reason: reason ? String(reason) : "",
+      });
       sendClient({ type: "error", message: "upstream_closed" });
       scheduleCloseIfIdle();
     });
 
-    upstream.on("error", () => {
+    upstream.on("error", (err) => {
+      metrics.ws.upstreamError += 1;
+      log("error", "upstream_error", {
+        userId: state.session.userId,
+        roomId: state.session.roomId,
+        clientId: state.session.clientId,
+        error: String(err?.message || err),
+      });
       sendClient({ type: "error", message: "upstream_error" });
       scheduleCloseIfIdle();
     });
@@ -580,6 +660,7 @@ wss.on("connection", (clientWs) => {
       const token = String(frame.token || "").trim();
       const session = sessionsByToken.get(token) || null;
       if (!session) {
+        log("warn", "ws_auth_failed", { remote });
         sendClient({ type: "error", message: "auth failed" });
         clientWs.close(1008, "unauthorized");
         return;
@@ -587,6 +668,13 @@ wss.on("connection", (clientWs) => {
 
       state.authed = true;
       state.session = session;
+      log("info", "ws_client_hello", {
+        remote,
+        identity: session.identity,
+        userId: session.userId,
+        roomId: session.roomId,
+        clientId: session.clientId,
+      });
       ensureUpstream();
       return;
     }
@@ -631,10 +719,13 @@ wss.on("connection", (clientWs) => {
 });
 
 server.listen(PORT, BIND, () => {
-  console.log(`[frontdoor] listening on http://${BIND}:${PORT}`);
-  console.log(`[frontdoor] static root: ${STATIC_ROOT}`);
-  console.log(`[frontdoor] login config: ${LOGIN_CONFIG_PATH}`);
-  console.log(`[frontdoor] history dir: ${HISTORY_DIR}`);
-  console.log(`[frontdoor] upstream ws: ${UPSTREAM_WS}`);
-  console.log(`[frontdoor] recent limit: ${RECENT_LIMIT} (ttl=${RECENT_TTL_DAYS}d)`);
+  log("info", "listening", {
+    bind: BIND,
+    port: PORT,
+    staticRoot: STATIC_ROOT,
+    loginConfig: LOGIN_CONFIG_PATH,
+    historyDir: HISTORY_DIR,
+    upstreamWs: UPSTREAM_WS,
+    recent: { limit: RECENT_LIMIT, ttlDays: RECENT_TTL_DAYS },
+  });
 });
