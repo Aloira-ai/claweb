@@ -74,6 +74,9 @@ const el = {
   threadsModal: document.getElementById("threads-modal"),
   threadsClose: document.getElementById("threads-close"),
   threadsList: document.getElementById("threads-list"),
+  searchInput: document.getElementById("search-input"),
+  searchClear: document.getElementById("search-clear"),
+  searchResults: document.getElementById("search-results"),
 };
 
 function setStatus(text, cls) {
@@ -159,6 +162,85 @@ function closeSocket() {
   } catch {
     // ignore
   }
+}
+
+function escapeHtml(text) {
+  return String(text || "")
+    .replaceAll("&", "&amp;")
+    .replaceAll("<", "&lt;")
+    .replaceAll(">", "&gt;")
+    .replaceAll('"', "&quot;")
+    .replaceAll("'", "&#39;");
+}
+
+function showSearchResults() {
+  if (!el.searchResults) return;
+  el.searchResults.classList.remove("hidden");
+}
+
+function hideSearchResults() {
+  if (!el.searchResults) return;
+  el.searchResults.classList.add("hidden");
+  el.searchResults.innerHTML = "";
+}
+
+function renderSearchResults(results, query) {
+  if (!el.searchResults) return;
+  if (!results.length) {
+    el.searchResults.innerHTML = `<div class="subtitle">No results for “${escapeHtml(query)}”.</div>`;
+    showSearchResults();
+    return;
+  }
+
+  const items = results
+    .slice(0, 20)
+    .map((r) => {
+      const role = escapeHtml(r.role);
+      const snippet = escapeHtml(r.text);
+      return `
+        <div class="search-hit" data-mid="${escapeHtml(r.messageId)}">
+          <div class="search-hit-title">${role}</div>
+          <div class="search-hit-snippet">${snippet}</div>
+        </div>
+      `.trim();
+    })
+    .join("");
+
+  el.searchResults.innerHTML = items;
+  showSearchResults();
+
+  el.searchResults.querySelectorAll(".search-hit").forEach((node) => {
+    node.addEventListener("click", () => {
+      const mid = normalizeId(node.getAttribute("data-mid"));
+      const target = mid ? state.messageIndex.get(mid)?.node : null;
+      if (target && typeof target.scrollIntoView === "function") {
+        target.scrollIntoView({ block: "center", behavior: "smooth" });
+      }
+    });
+  });
+}
+
+function runLocalSearch(query) {
+  const q = String(query || "").trim().toLowerCase();
+  if (!q) return [];
+
+  const results = [];
+  for (const [messageId, rec] of state.messageIndex.entries()) {
+    const text = String(rec?.text || "");
+    if (!text) continue;
+    if (!text.toLowerCase().includes(q)) continue;
+
+    const node = rec?.node;
+    const role = node?.classList?.contains("msg-user")
+      ? "user"
+      : node?.classList?.contains("msg-assistant")
+        ? "assistant"
+        : "system";
+
+    results.push({ messageId, role, text });
+  }
+
+  return results;
 }
 
 function normalizeWsUrl(input) {
@@ -669,6 +751,38 @@ el.input.addEventListener("keydown", (event) => {
 });
 el.disconnectBtn.addEventListener("click", closeSocket);
 el.logoutBtn.addEventListener("click", logout);
+
+if (el.searchInput) {
+  const onSearch = () => {
+    const q = String(el.searchInput.value || "").trim();
+    if (!q) {
+      hideSearchResults();
+      return;
+    }
+    const results = runLocalSearch(q);
+    renderSearchResults(results, q);
+  };
+
+  el.searchInput.addEventListener("input", onSearch);
+  el.searchInput.addEventListener("keydown", (e) => {
+    if (e.key === "Enter") {
+      e.preventDefault();
+      onSearch();
+    } else if (e.key === "Escape") {
+      hideSearchResults();
+      el.searchInput.value = "";
+      el.searchInput.blur();
+    }
+  });
+}
+
+if (el.searchClear) {
+  el.searchClear.addEventListener("click", () => {
+    if (el.searchInput) el.searchInput.value = "";
+    hideSearchResults();
+    el.searchInput?.focus();
+  });
+}
 
 if (el.threadsBtn) {
   el.threadsBtn.addEventListener("click", async () => {

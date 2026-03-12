@@ -4,7 +4,7 @@
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
   <title>CLAWeb Entry</title>
-  <link rel="stylesheet" href="/claweb/style.css?v=20260312-4" />
+  <link rel="stylesheet" href="/claweb/style.css?v=20260312-5" />
 </head>
 <body>
   <main class="app">
@@ -33,10 +33,14 @@
           <p id="session-desc" class="subtitle"></p>
         </div>
         <div class="topbar-actions">
+          <input id="search-input" class="search" type="search" placeholder="Search messages" autocomplete="off" />
+          <button id="search-clear" type="button" class="ghost">Clear</button>
           <button id="threads-btn" type="button" class="ghost">Threads</button>
           <div id="conn-status" class="status status-offline">Offline</div>
         </div>
       </header>
+
+      <section id="search-results" class="search-results hidden" aria-live="polite"></section>
 
       <section id="threads-modal" class="modal hidden" aria-hidden="true" onclick="if(event.target===this){this.classList.add('hidden');this.setAttribute('aria-hidden','true');}">
         <div class="modal-card" role="dialog" aria-modal="true" aria-label="Threads">
@@ -63,6 +67,6 @@
     </section>
   </main>
 
-  <script src="/claweb/app.js?v=20260312-5"></script>
+  <script src="/claweb/app.js?v=20260312-6"></script>
 </body>
 </html>

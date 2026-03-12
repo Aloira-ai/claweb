@@ -63,6 +63,47 @@ body {
   gap: 8px;
 }
 
+.search {
+  width: min(280px, 48vw);
+  padding: 8px 10px;
+  border-radius: 999px;
+}
+
+.search-results {
+  margin-top: 10px;
+  border: 1px solid var(--line);
+  border-radius: 12px;
+  background: #fff;
+  padding: 10px;
+  max-height: 180px;
+  overflow: auto;
+}
+
+.search-hit {
+  border-radius: 10px;
+  padding: 8px 10px;
+  cursor: pointer;
+  border: 1px solid transparent;
+}
+
+.search-hit:hover {
+  background: #f6f8fc;
+  border-color: var(--line);
+}
+
+.search-hit-title {
+  font-size: 12px;
+  color: var(--muted);
+}
+
+.search-hit-snippet {
+  margin-top: 4px;
+  font-size: 13px;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
 .modal {
   position: fixed;
   inset: 0;
