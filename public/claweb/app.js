@@ -57,7 +57,7 @@ const state = {
   messageIndex: new Map(), // messageId -> { text, node }
   assistantName: null,
   composingReplyTo: null,
-  pendingImage: null, // { file, dataUrl, filename, mime, compressedDataUrl?, compressedMime?, stats? }
+  pendingImage: null, // { file, dataUrl, filename, mime, compressedDataUrl?, compressedMime?, stats?, compressionPromise?, compressing? }
 };
 
 const el = {
@@ -883,6 +883,8 @@ function setPendingImage(file, dataUrl) {
     compressedDataUrl: null,
     compressedMime: null,
     stats: null,
+    compressionPromise: null,
+    compressing: true,
   };
 
   if (el.imagePreview) el.imagePreview.src = String(dataUrl || "");
@@ -893,7 +895,7 @@ function setPendingImage(file, dataUrl) {
   // Best-effort client-side compression to keep uploads fast on mobile.
   // We do it async and quietly fall back to original on failure.
   const current = state.pendingImage;
-  Promise.resolve()
+  current.compressionPromise = Promise.resolve()
     .then(async () => {
       const res = await compressImageDataUrl(dataUrl, {
         sourceMime: current.mime,
@@ -906,6 +908,7 @@ function setPendingImage(file, dataUrl) {
       current.compressedDataUrl = res.dataUrl;
       current.compressedMime = res.mime;
       current.stats = res.stats;
+      current.compressing = false;
 
       const srcKb = res.stats?.srcBytes ? Math.round(res.stats.srcBytes / 1024) : null;
       const outKb = res.stats?.outBytes ? Math.round(res.stats.outBytes / 1024) : null;
@@ -943,7 +946,10 @@ function setPendingImage(file, dataUrl) {
       }
     })
     .catch(() => {
-      // ignore compression errors
+      if (state.pendingImage === current) current.compressing = false;
+      if (state.pendingImage === current && el.imageHint) {
+        el.imageHint.textContent = "压缩失败，发送时将回退原图";
+      }
     });
 }
 
@@ -960,6 +966,18 @@ function clearPendingImage() {
 
 async function uploadPendingImage() {
   if (!state.pendingImage) return null;
+
+  if (state.pendingImage.compressionPromise) {
+    if (el.imageHint && state.pendingImage.compressing) {
+      el.imageHint.textContent = "压缩完成后发送中…";
+    }
+    try {
+      await state.pendingImage.compressionPromise;
+    } catch {
+      // fall back to original image
+    }
+  }
+
   const { resp, data } = await fetchJsonWithFallback("/upload", "/claweb/upload", {
     method: "POST",
     headers: {

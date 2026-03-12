@@ -71,7 +71,7 @@ export async function buildInboundCtx(input: BuildInboundCtxInput) {
       const downloaded = await tryDownloadMediaToFile({
         url: mediaUrl,
         mediaType,
-        maxBytes: 15 * 1024 * 1024,
+        maxBytes: 40 * 1024 * 1024,
       });
       if (downloaded) {
         mediaPath = downloaded.filePath;
