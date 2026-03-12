@@ -646,6 +646,7 @@ const server = http.createServer(async (req, res) => {
 // --- WS server (browser-facing) ---
 
 const ASSISTANT_FRAME_COALESCE_MS = 900;
+const ASSISTANT_MEDIA_ONLY_COALESCE_MS = 8000;
 
 const wss = new WebSocketServer({ server, path: "/ws" });
 
@@ -709,6 +710,7 @@ wss.on("connection", (clientWs, req) => {
       clientId: state.session.clientId,
       turnId,
       mergedFrames: pending.frames,
+      flushMode: !text && (incomingMediaUrl || incomingMediaUrls.length > 0 || incomingMediaDataUrl) ? "media-only" : "merged",
       hasText: Boolean(text),
       textPreview: text ? text.slice(0, 180) : null,
       textHasMediaToken,
@@ -827,6 +829,10 @@ wss.on("connection", (clientWs, req) => {
     for (const item of Object.keys(frame || {})) current.keys.add(item);
 
     if (current.timer) clearTimeout(current.timer);
+    const hasAnyMedia = Boolean(current.mediaUrl || current.mediaDataUrl || current.mediaUrls.length > 0);
+    const flushDelayMs = hasAnyMedia && !current.text
+      ? ASSISTANT_MEDIA_ONLY_COALESCE_MS
+      : ASSISTANT_FRAME_COALESCE_MS;
     current.timer = setTimeout(() => {
       flushPendingAssistant(key).catch((error) => {
         log("error", "assistant_frame_flush_failed", {
@@ -836,7 +842,7 @@ wss.on("connection", (clientWs, req) => {
           error: String(error?.message || error),
         });
       });
-    }, ASSISTANT_FRAME_COALESCE_MS);
+    }, flushDelayMs);
 
     state.pendingAssistant.set(key, current);
   }
