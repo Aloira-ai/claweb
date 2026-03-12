@@ -45,6 +45,29 @@ npm i
 node server.js
 ```
 
+## Upgrade / Migration
+
+### Legacy history filename migration
+
+Older deployments may store history as per-identity files like:
+- `demo-user-b.jsonl`
+- `demo-passphrase.jsonl`
+
+The current frontdoor expects history files keyed by:
+
+- `{userId}__{roomId}__{clientId}.jsonl`
+
+If you switch implementations and history appears "missing", run:
+
+```bash
+node scripts/migrate-history.js --dir /var/lib/claweb-example/history
+```
+
+It will:
+- create a full backup directory next to `--dir` (`<dir>.migrated.<timestamp>`)
+- generate new keyed jsonl files
+- NOT delete legacy files
+
 Then open:
 - `http://127.0.0.1:18081/`
 
