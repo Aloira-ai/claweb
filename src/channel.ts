@@ -141,7 +141,7 @@ export function clawebPlugin(runtime: PluginRuntime): ChannelPlugin<ClawebAccoun
               );
             }
 
-            const inboundCtx = buildInboundCtx({
+            const inboundCtx = await buildInboundCtx({
               runtime,
               channel: CHANNEL_ID,
               accountId: account.accountId,
