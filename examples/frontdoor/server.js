@@ -512,11 +512,15 @@ wss.on("connection", (clientWs) => {
       }
 
       if (frame.type === "message") {
-        const messageId = String(frame.id || "").trim() || null;
+        // Upstream CLAWeb currently tends to reuse the user turn id as `frame.id`.
+        // To avoid id collisions (turnId vs messageId), we mint a new assistant message id
+        // and attach `replyTo` back to the original turn id.
+        const turnId = String(frame.id || "").trim() || null;
+        const asstMessageId = `asst_${randomUUID()}`;
         const text = String(frame.text || "").trim();
 
-        if (messageId && state.inFlight.has(messageId)) {
-          state.inFlight.delete(messageId);
+        if (turnId && state.inFlight.has(turnId)) {
+          state.inFlight.delete(turnId);
         }
 
         if (text) {
@@ -528,12 +532,19 @@ wss.on("connection", (clientWs) => {
               role: "assistant",
               text,
               ts: Date.now(),
-              messageId: messageId || `asst_${randomUUID()}`,
+              messageId: asstMessageId,
+              replyTo: turnId,
             },
           });
         }
 
-        sendClient(frame);
+        // Forward to browser with new id + replyTo
+        sendClient({
+          ...frame,
+          id: asstMessageId,
+          messageId: asstMessageId,
+          replyTo: frame.replyTo ?? frame.parentId ?? turnId ?? undefined,
+        });
         scheduleCloseIfIdle();
         return;
       }

@@ -398,10 +398,15 @@ function connect() {
     if (frame.type === "error") {
       const reason = frame.message || "unknown error";
       addMessage("system", `Server error: ${reason}`);
-      if (frame.id && state.pendingById.has(frame.id)) {
-        const pending = state.pendingById.get(frame.id);
+      const pendingCandidates = [frame.id, frame.replyTo, frame.parentId]
+        .map(normalizeId)
+        .filter(Boolean);
+      for (const cid of pendingCandidates) {
+        if (!state.pendingById.has(cid)) continue;
+        const pending = state.pendingById.get(cid);
         markPending(pending.metaNode, "failed");
-        state.pendingById.delete(frame.id);
+        state.pendingById.delete(cid);
+        break;
       }
       if (reason.toLowerCase().includes("auth") || reason.toLowerCase().includes("token")) {
         setStatus("Auth failed", "status-offline");
