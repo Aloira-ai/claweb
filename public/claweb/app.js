@@ -67,19 +67,25 @@ const el = {
   loginBtn: document.getElementById("login-btn"),
   loginError: document.getElementById("login-error"),
   sessionDesc: document.getElementById("session-desc"),
-  status: document.getElementById("conn-status"),
+  statusDot: document.getElementById("conn-status-dot"),
+  statusText: document.getElementById("conn-status-text"),
   messages: document.getElementById("messages"),
   input: document.getElementById("message-input"),
   sendBtn: document.getElementById("send-btn"),
-  disconnectBtn: document.getElementById("disconnect-btn"),
-  logoutBtn: document.getElementById("logout-btn"),
-  threadsBtn: document.getElementById("threads-btn"),
-  threadsModal: document.getElementById("threads-modal"),
-  threadsClose: document.getElementById("threads-close"),
-  threadsList: document.getElementById("threads-list"),
+  searchToggle: document.getElementById("search-toggle"),
+  searchModal: document.getElementById("search-modal"),
+  searchClose: document.getElementById("search-close"),
   searchInput: document.getElementById("search-input"),
   searchClear: document.getElementById("search-clear"),
   searchResults: document.getElementById("search-results"),
+  moreBtn: document.getElementById("more-btn"),
+  moreMenu: document.getElementById("more-menu"),
+  threadsAction: document.getElementById("threads-action"),
+  disconnectBtn: document.getElementById("disconnect-btn"),
+  logoutBtn: document.getElementById("logout-btn"),
+  threadsModal: document.getElementById("threads-modal"),
+  threadsClose: document.getElementById("threads-close"),
+  threadsList: document.getElementById("threads-list"),
   replyBanner: document.getElementById("reply-banner"),
   replyBannerText: document.getElementById("reply-banner-text"),
   replyCancel: document.getElementById("reply-cancel"),
@@ -96,8 +102,8 @@ const el = {
 };
 
 function setStatus(text, cls) {
-  el.status.textContent = text;
-  el.status.className = `status ${cls}`;
+  if (el.statusText) el.statusText.textContent = text;
+  if (el.statusDot) el.statusDot.className = `status-dot ${cls}`;
 }
 
 function setLoginError(msg = "") {
@@ -129,6 +135,49 @@ function showMsgMenu({ x, y, messageId, messageText }) {
   el.msgMenu.dataset.messageText = String(messageText || "");
   el.msgMenu.classList.remove("hidden");
   el.msgMenu.setAttribute("aria-hidden", "false");
+}
+
+function hideMoreMenu() {
+  if (!el.moreMenu) return;
+  el.moreMenu.classList.add("hidden");
+  el.moreMenu.setAttribute("aria-hidden", "true");
+  el.moreMenu.style.left = "";
+  el.moreMenu.style.top = "";
+}
+
+function toggleMoreMenu() {
+  if (!el.moreMenu || !el.moreBtn) return;
+  const hidden = el.moreMenu.classList.contains("hidden");
+  if (!hidden) {
+    hideMoreMenu();
+    return;
+  }
+  const rect = el.moreBtn.getBoundingClientRect();
+  const left = Math.max(8, Math.min(window.innerWidth - 180, rect.right - 164));
+  const top = Math.min(window.innerHeight - 200, rect.bottom + 8);
+  el.moreMenu.style.left = `${left}px`;
+  el.moreMenu.style.top = `${top}px`;
+  el.moreMenu.classList.remove("hidden");
+  el.moreMenu.setAttribute("aria-hidden", "false");
+}
+
+function showSearchModal() {
+  if (!el.searchModal) return;
+  el.searchModal.classList.remove("hidden");
+  el.searchModal.setAttribute("aria-hidden", "false");
+  window.setTimeout(() => el.searchInput?.focus(), 0);
+}
+
+function hideSearchModal() {
+  if (!el.searchModal) return;
+  el.searchModal.classList.add("hidden");
+  el.searchModal.setAttribute("aria-hidden", "true");
+  hideSearchResults();
+  if (el.searchInput) el.searchInput.value = "";
+}
+
+function isSearchModalOpen() {
+  return !!el.searchModal && !el.searchModal.classList.contains("hidden");
 }
 
 function addMessageRich({
@@ -375,8 +424,11 @@ function normalizeWsUrl(input) {
 function showChatPanel(session) {
   el.loginPanel.classList.add("hidden");
   el.chatPanel.classList.remove("hidden");
-  const roomLabel = session.roomId ? `room=${session.roomId}` : "room=direct";
-  el.sessionDesc.textContent = `${session.displayName || session.identity} | user=${session.userId} | ${roomLabel}`;
+  const label = session.displayName || session.identity || "当前会话";
+  if (el.sessionDesc) {
+    el.sessionDesc.textContent = label;
+    el.sessionDesc.classList.add("hidden");
+  }
   el.input.focus();
 }
 
@@ -624,14 +676,14 @@ function connect() {
   }
 
   closeSocket();
-  setStatus("Connecting", "status-connecting");
+  setStatus("连接中", "status-connecting");
   state.ready = false;
 
   let ws;
   try {
     ws = new WebSocket(state.session.wsUrl);
   } catch {
-    setStatus("Connection failed", "status-offline");
+    setStatus("连接失败", "status-offline");
     addMessage("system", "Unable to create WebSocket.");
     return;
   }
@@ -660,7 +712,7 @@ function connect() {
 
     if (frame.type === "ready") {
       state.ready = true;
-      setStatus("Online", "status-online");
+      setStatus("在线", "status-online");
       addMessage("system", `claweb ready (${frame.serverVersion || "unknown"})`);
       return;
     }
@@ -695,7 +747,7 @@ function connect() {
         break;
       }
       if (reason.toLowerCase().includes("auth") || reason.toLowerCase().includes("token")) {
-        setStatus("Auth failed", "status-offline");
+        setStatus("鉴权失败", "status-offline");
       }
       return;
     }
@@ -704,7 +756,7 @@ function connect() {
   });
 
   ws.addEventListener("close", () => {
-    setStatus("Disconnected", "status-offline");
+    setStatus("已断开", "status-offline");
     state.ready = false;
 
     for (const pending of state.pendingById.values()) {
@@ -1163,6 +1215,7 @@ async function sendCurrentMessage() {
   try {
     state.ws.send(JSON.stringify(frame));
     el.input.value = "";
+    autoResizeInput();
     clearPendingImage();
 
     // clear reply mode after send
@@ -1190,11 +1243,14 @@ function logout() {
   el.imageBanner?.classList.add("hidden");
   if (el.imagePreview) el.imagePreview.src = "";
   if (el.imageName) el.imageName.textContent = "";
+  hideMoreMenu();
+  hideSearchModal();
+  hideThreadsModal();
   try {
     if (el.imageInput) el.imageInput.value = "";
   } catch {}
   el.messages.innerHTML = "";
-  setStatus("Offline", "status-offline");
+  setStatus("离线", "status-offline");
   showLoginPanel();
 }
 
@@ -1214,7 +1270,7 @@ function hideThreadsModal() {
   el.threadsModal.classList.add("hidden");
   el.threadsModal.setAttribute("aria-hidden", "true");
   try {
-    el.threadsBtn?.focus();
+    el.moreBtn?.focus();
   } catch {
     // ignore
   }
@@ -1301,7 +1357,7 @@ function renderThreadsList(threads) {
 }
 
 showLoginPanel();
-setStatus("Offline", "status-offline");
+setStatus("离线", "status-offline");
 
 el.loginBtn.addEventListener("click", login);
 el.passphrase.addEventListener("keydown", (event) => {
@@ -1310,13 +1366,22 @@ el.passphrase.addEventListener("keydown", (event) => {
     login();
   }
 });
+function autoResizeInput() {
+  if (!el.input) return;
+  el.input.style.height = "auto";
+  const next = Math.min(el.input.scrollHeight, 180);
+  el.input.style.height = `${Math.max(46, next)}px`;
+}
+
 el.sendBtn.addEventListener("click", sendCurrentMessage);
+el.input.addEventListener("input", autoResizeInput);
 el.input.addEventListener("keydown", (event) => {
   if (event.key === "Enter" && !event.shiftKey) {
     event.preventDefault();
     sendCurrentMessage();
   }
 });
+autoResizeInput();
 
 // image pick
 if (el.imageBtn && el.imageInput) {
@@ -1346,8 +1411,14 @@ el.input.addEventListener("paste", async (e) => {
 if (el.imageCancel) {
   el.imageCancel.addEventListener("click", clearPendingImage);
 }
-el.disconnectBtn.addEventListener("click", closeSocket);
-el.logoutBtn.addEventListener("click", logout);
+el.disconnectBtn.addEventListener("click", () => {
+  hideMoreMenu();
+  closeSocket();
+});
+el.logoutBtn.addEventListener("click", () => {
+  hideMoreMenu();
+  logout();
+});
 
 if (el.replyCancel) {
   el.replyCancel.addEventListener("click", () => {
@@ -1403,10 +1474,13 @@ if (el.msgMenuCopy) {
 window.addEventListener(
   "click",
   (e) => {
-    if (!el.msgMenu || el.msgMenu.classList.contains("hidden")) return;
     const target = e.target;
-    if (target && el.msgMenu.contains(target)) return;
-    hideMsgMenu();
+    if (el.msgMenu && !el.msgMenu.classList.contains("hidden")) {
+      if (!(target && el.msgMenu.contains(target))) hideMsgMenu();
+    }
+    if (el.moreMenu && !el.moreMenu.classList.contains("hidden")) {
+      if (!(target && el.moreMenu.contains(target)) && target !== el.moreBtn) hideMoreMenu();
+    }
   },
   { capture: true },
 );
@@ -1414,8 +1488,8 @@ window.addEventListener(
 window.addEventListener(
   "scroll",
   () => {
-    if (!el.msgMenu || el.msgMenu.classList.contains("hidden")) return;
-    hideMsgMenu();
+    if (el.msgMenu && !el.msgMenu.classList.contains("hidden")) hideMsgMenu();
+    if (el.moreMenu && !el.moreMenu.classList.contains("hidden")) hideMoreMenu();
   },
   { passive: true },
 );
@@ -1437,11 +1511,21 @@ if (el.searchInput) {
       e.preventDefault();
       onSearch();
     } else if (e.key === "Escape") {
-      hideSearchResults();
-      el.searchInput.value = "";
-      el.searchInput.blur();
+      hideSearchModal();
     }
   });
+}
+
+if (el.searchToggle) {
+  el.searchToggle.addEventListener("click", () => {
+    hideMoreMenu();
+    if (isSearchModalOpen()) hideSearchModal();
+    else showSearchModal();
+  });
+}
+
+if (el.searchClose) {
+  el.searchClose.addEventListener("click", hideSearchModal);
 }
 
 if (el.searchClear) {
@@ -1452,26 +1536,34 @@ if (el.searchClear) {
   });
 }
 
-if (el.threadsBtn) {
-  el.threadsBtn.addEventListener("click", async () => {
+if (el.moreBtn) {
+  el.moreBtn.addEventListener("click", (e) => {
+    e.preventDefault();
+    e.stopPropagation();
+    toggleMoreMenu();
+  });
+}
+
+if (el.threadsAction) {
+  el.threadsAction.addEventListener("click", async () => {
+    hideMoreMenu();
     if (!state.session) {
-      addMessage("system", "Please login first.");
+      addMessage("system", "请先登录。");
       return;
     }
 
-    // Toggle behavior: if it's already open, close it.
     if (isThreadsModalOpen()) {
       hideThreadsModal();
       return;
     }
 
     showThreadsModal();
-    el.threadsList.textContent = "Loading...";
+    el.threadsList.textContent = "加载中…";
     try {
       const threads = await loadThreads();
       renderThreadsList(threads);
     } catch (e) {
-      el.threadsList.textContent = "Failed to load threads.";
+      el.threadsList.textContent = "加载失败。";
       addMessage("system", `Threads error: ${String(e?.message || e)}`);
     }
   });
@@ -1492,12 +1584,27 @@ if (el.threadsModal) {
     if (e.target === el.threadsModal) hideThreadsModal();
   };
   el.threadsModal.addEventListener("click", onBackdrop);
-  // Mobile hardening: some webviews are flaky with click; ensure touch also closes.
   el.threadsModal.addEventListener("touchstart", onBackdrop, { passive: true });
 }
 
+if (el.searchModal) {
+  const onSearchBackdrop = (e) => {
+    if (e.target === el.searchModal) hideSearchModal();
+  };
+  el.searchModal.addEventListener("click", onSearchBackdrop);
+  el.searchModal.addEventListener("touchstart", onSearchBackdrop, { passive: true });
+}
+
 document.addEventListener("keydown", (e) => {
-  if (e.key === "Escape" && isThreadsModalOpen()) {
-    hideThreadsModal();
+  if (e.key !== "Escape") return;
+  if (isSearchModalOpen()) {
+    hideSearchModal();
+    return;
   }
+  if (isThreadsModalOpen()) {
+    hideThreadsModal();
+    return;
+  }
+  hideMoreMenu();
+  hideMsgMenu();
 });

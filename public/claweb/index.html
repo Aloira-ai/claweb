@@ -1,95 +1,113 @@
 <!doctype html>
-<html lang="en">
+<html lang="zh-CN">
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
   <title>CLAWeb Entry</title>
-  <link rel="stylesheet" href="/claweb/style.css?v=20260312-23" />
+  <link rel="stylesheet" href="/claweb/style.css?v=20260312-24" />
 </head>
 <body>
   <main class="app">
     <section id="login-panel" class="panel gate-panel">
       <header>
-        <h1>Enter CLAWeb</h1>
-        <p class="subtitle">Use your passphrase to restore the fixed session route.</p>
+        <h1>进入 CLAWeb</h1>
+        <p class="subtitle">输入口令，回到固定会话。</p>
       </header>
 
       <div class="row">
-        <label for="passphrase-input">Passphrase</label>
-        <input id="passphrase-input" type="password" autocomplete="current-password" placeholder="Enter passphrase" />
+        <label for="passphrase-input">口令</label>
+        <input id="passphrase-input" type="password" autocomplete="current-password" placeholder="输入口令" />
       </div>
 
       <div class="actions single">
-        <button id="login-btn" type="button">Continue</button>
+        <button id="login-btn" type="button">进入聊天</button>
       </div>
 
       <p id="login-error" class="error" role="status" aria-live="polite"></p>
     </section>
 
-    <section id="chat-panel" class="panel hidden">
-      <header class="topbar">
-        <div>
-          <h2>CLAWeb Chat</h2>
-          <p id="session-desc" class="subtitle"></p>
+    <section id="chat-panel" class="chat-shell hidden">
+      <header class="chat-header">
+        <div class="chat-brand">
+          <div class="brand-avatar">🌌</div>
+          <div class="brand-copy">
+            <h2>CLAWeb</h2>
+            <div class="brand-status-row">
+              <span id="conn-status-dot" class="status-dot status-offline"></span>
+              <span id="conn-status-text" class="brand-status-text">离线</span>
+            </div>
+            <p id="session-desc" class="subtitle hidden"></p>
+          </div>
         </div>
-        <div class="topbar-actions">
-          <input id="search-input" class="search" type="search" placeholder="Search messages" autocomplete="off" />
-          <button id="search-clear" type="button" class="ghost">Clear</button>
-          <button id="threads-btn" type="button" class="ghost">Threads</button>
-          <div id="conn-status" class="status status-offline">Offline</div>
+
+        <div class="header-actions">
+          <button id="search-toggle" type="button" class="icon-btn" aria-label="搜索">🔍</button>
+          <button id="more-btn" type="button" class="icon-btn" aria-label="更多">⋯</button>
         </div>
       </header>
 
-      <section id="search-results" class="search-results hidden" aria-live="polite"></section>
-
-      <section id="threads-modal" class="modal hidden" aria-hidden="true" onclick="if(event.target===this){this.classList.add('hidden');this.setAttribute('aria-hidden','true');}">
-        <div class="modal-card" role="dialog" aria-modal="true" aria-label="Threads">
-          <header class="modal-header">
-            <h3>Threads</h3>
-            <button id="threads-close" type="button" class="ghost" onclick="event.preventDefault();event.stopPropagation();const m=document.getElementById('threads-modal');if(m){m.classList.add('hidden');m.setAttribute('aria-hidden','true');}">Close</button>
-          </header>
-          <p class="subtitle">Switching thread will ask you to login for that identity.</p>
-          <div id="threads-list" class="threads-list"></div>
-        </div>
-      </section>
-
       <section id="messages" class="messages" aria-live="polite"></section>
 
-      <footer class="composer">
+      <footer class="composer-card">
         <div id="reply-banner" class="reply-banner hidden" aria-live="polite">
           <div class="reply-banner-text" id="reply-banner-text"></div>
-          <button id="reply-cancel" type="button" class="ghost">Cancel</button>
+          <button id="reply-cancel" type="button" class="mini-btn" aria-label="取消回复">✕</button>
         </div>
 
         <div id="image-banner" class="image-banner hidden" aria-live="polite">
           <img id="image-preview" class="image-preview" alt="selected image" />
           <div class="image-banner-meta">
-            <div id="image-name" class="image-name">Image selected</div>
-            <div id="image-hint" class="image-hint">Paste or pick an image, then Send</div>
+            <div id="image-name" class="image-name">已选图片</div>
+            <div id="image-hint" class="image-hint">选择或粘贴图片后发送</div>
           </div>
-          <button id="image-cancel" type="button" class="ghost">Remove</button>
+          <button id="image-cancel" type="button" class="mini-btn" aria-label="移除图片">✕</button>
         </div>
 
-        <textarea id="message-input" rows="2" placeholder="Enter sends, Shift+Enter adds newline"></textarea>
-        <div class="composer-actions">
-          <button id="image-btn" type="button" class="ghost">Image</button>
+        <div class="composer-row">
+          <button id="image-btn" type="button" class="icon-btn soft" aria-label="选择图片">＋</button>
           <input id="image-input" type="file" accept="image/*" class="hidden" />
-          <button id="send-btn" type="button">Send</button>
+          <textarea id="message-input" rows="1" placeholder="说点什么…"></textarea>
+          <button id="send-btn" type="button" class="send-btn" aria-label="发送">➤</button>
         </div>
       </footer>
 
       <div id="msg-menu" class="msg-menu hidden" role="menu" aria-hidden="true">
-        <button id="msg-menu-reply" type="button" class="ghost" role="menuitem">Reply</button>
-        <button id="msg-menu-copy" type="button" class="ghost" role="menuitem">Copy</button>
+        <button id="msg-menu-reply" type="button" class="ghost" role="menuitem">回复</button>
+        <button id="msg-menu-copy" type="button" class="ghost" role="menuitem">复制</button>
       </div>
 
-      <div class="actions secondary">
-        <button id="disconnect-btn" type="button" class="ghost">Disconnect</button>
-        <button id="logout-btn" type="button" class="ghost">Logout</button>
+      <div id="more-menu" class="floating-menu hidden" role="menu" aria-hidden="true">
+        <button id="threads-action" type="button" class="ghost" role="menuitem">切换会话</button>
+        <button id="disconnect-btn" type="button" class="ghost" role="menuitem">断开连接</button>
+        <button id="logout-btn" type="button" class="ghost" role="menuitem">退出登录</button>
       </div>
+
+      <section id="search-modal" class="modal hidden" aria-hidden="true">
+        <div class="modal-card search-modal-card" role="dialog" aria-modal="true" aria-label="搜索消息">
+          <header class="modal-header compact">
+            <h3>搜索消息</h3>
+            <button id="search-close" type="button" class="mini-btn" aria-label="关闭搜索">✕</button>
+          </header>
+          <div class="search-bar">
+            <input id="search-input" class="search" type="search" placeholder="搜索消息内容" autocomplete="off" />
+            <button id="search-clear" type="button" class="ghost">清空</button>
+          </div>
+          <section id="search-results" class="search-results hidden" aria-live="polite"></section>
+        </div>
+      </section>
+
+      <section id="threads-modal" class="modal hidden" aria-hidden="true">
+        <div class="modal-card" role="dialog" aria-modal="true" aria-label="切换会话">
+          <header class="modal-header compact">
+            <h3>切换会话</h3>
+            <button id="threads-close" type="button" class="mini-btn" aria-label="关闭">✕</button>
+          </header>
+          <div id="threads-list" class="threads-list"></div>
+        </div>
+      </section>
     </section>
   </main>
 
-  <script src="/claweb/app.js?v=20260312-19"></script>
+  <script src="/claweb/app.js?v=20260312-24"></script>
 </body>
 </html>
