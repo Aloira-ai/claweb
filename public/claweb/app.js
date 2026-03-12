@@ -57,7 +57,7 @@ const state = {
   messageIndex: new Map(), // messageId -> { text, node }
   assistantName: null,
   composingReplyTo: null,
-  pendingImage: null, // { file, dataUrl, filename, mime }
+  pendingImage: null, // { file, dataUrl, filename, mime, compressedDataUrl?, compressedMime?, stats? }
 };
 
 const el = {
@@ -726,16 +726,129 @@ async function readFileAsDataURL(file) {
   });
 }
 
+function canUseWebp() {
+  try {
+    const c = document.createElement("canvas");
+    if (!c.toDataURL) return false;
+    return c.toDataURL("image/webp").startsWith("data:image/webp");
+  } catch {
+    return false;
+  }
+}
+
+function dataUrlByteLength(dataUrl) {
+  try {
+    const idx = String(dataUrl || "").indexOf(",");
+    if (idx < 0) return null;
+    const b64 = String(dataUrl).slice(idx + 1);
+    // base64 size ≈ 3/4 length
+    return Math.floor((b64.length * 3) / 4);
+  } catch {
+    return null;
+  }
+}
+
+async function compressImageDataUrl(inputDataUrl, opts = {}) {
+  const maxSide = Number(opts.maxSide || 1600);
+  const targetMaxBytes = Number(opts.targetMaxBytes || 1200 * 1024);
+  const preferWebp = opts.preferWebp !== false;
+
+  const img = new Image();
+  img.decoding = "async";
+  img.src = String(inputDataUrl || "");
+  await img.decode();
+
+  const sw = Number(img.naturalWidth || img.width || 0);
+  const sh = Number(img.naturalHeight || img.height || 0);
+  if (!sw || !sh) throw new Error("bad_image_dimensions");
+
+  const scale = Math.min(1, maxSide / Math.max(sw, sh));
+  const dw = Math.max(1, Math.round(sw * scale));
+  const dh = Math.max(1, Math.round(sh * scale));
+
+  const canvas = document.createElement("canvas");
+  canvas.width = dw;
+  canvas.height = dh;
+  const ctx = canvas.getContext("2d", { alpha: true });
+  if (!ctx) throw new Error("no_canvas_ctx");
+  ctx.drawImage(img, 0, 0, dw, dh);
+
+  const mime = preferWebp && canUseWebp() ? "image/webp" : "image/jpeg";
+
+  // Try a small quality ladder until size is reasonable.
+  const qualities = [0.86, 0.82, 0.78, 0.72, 0.65, 0.58];
+  let best = null;
+
+  for (const q of qualities) {
+    const out = canvas.toDataURL(mime, q);
+    const bytes = dataUrlByteLength(out);
+    if (bytes != null && bytes <= targetMaxBytes) {
+      best = { dataUrl: out, mime, quality: q, bytes };
+      break;
+    }
+    // keep the smallest we've seen (in case nothing fits)
+    if (!best || (bytes != null && best.bytes != null && bytes < best.bytes)) {
+      best = { dataUrl: out, mime, quality: q, bytes };
+    }
+  }
+
+  return {
+    dataUrl: best?.dataUrl || inputDataUrl,
+    mime: best?.mime || "image/jpeg",
+    stats: {
+      srcBytes: dataUrlByteLength(inputDataUrl),
+      outBytes: best?.bytes ?? null,
+      scaled: scale < 1,
+      width: dw,
+      height: dh,
+      quality: best?.quality ?? null,
+    },
+  };
+}
+
 function setPendingImage(file, dataUrl) {
   state.pendingImage = {
     file,
     dataUrl,
     filename: file?.name || "image.png",
     mime: file?.type || "image/png",
+    compressedDataUrl: null,
+    compressedMime: null,
+    stats: null,
   };
+
   if (el.imagePreview) el.imagePreview.src = String(dataUrl || "");
   if (el.imageName) el.imageName.textContent = state.pendingImage.filename;
   el.imageBanner?.classList.remove("hidden");
+
+  // Best-effort client-side compression to keep uploads fast on mobile.
+  // We do it async and quietly fall back to original on failure.
+  const current = state.pendingImage;
+  Promise.resolve()
+    .then(async () => {
+      const res = await compressImageDataUrl(dataUrl, {
+        maxSide: 1600,
+        targetMaxBytes: 1200 * 1024,
+        preferWebp: true,
+      });
+      // If user cleared/replaced the image, abort.
+      if (state.pendingImage !== current) return;
+
+      current.compressedDataUrl = res.dataUrl;
+      current.compressedMime = res.mime;
+      current.stats = res.stats;
+
+      if (el.imageName) {
+        const srcKb = res.stats?.srcBytes ? Math.round(res.stats.srcBytes / 1024) : null;
+        const outKb = res.stats?.outBytes ? Math.round(res.stats.outBytes / 1024) : null;
+        if (srcKb && outKb) {
+          el.imageName.textContent = `${current.filename} (${srcKb}KB→${outKb}KB)`;
+        }
+      }
+    })
+    .catch(() => {
+      // ignore compression errors
+    });
 }
 
 function clearPendingImage() {
@@ -757,7 +870,7 @@ async function uploadPendingImage() {
       "x-claweb-token": state.session?.token || "",
     },
     body: JSON.stringify({
-      dataUrl: state.pendingImage.dataUrl,
+      dataUrl: state.pendingImage.compressedDataUrl || state.pendingImage.dataUrl,
       filename: state.pendingImage.filename,
     }),
   });
@@ -768,7 +881,11 @@ async function uploadPendingImage() {
 
   return {
     mediaUrl: data.mediaUrl || data.relUrl,
-    mediaType: data.mediaType || state.pendingImage.mime,
+    mediaType:
+      data.mediaType ||
+      state.pendingImage.compressedMime ||
+      state.pendingImage.mime ||
+      "application/octet-stream",
   };
 }
 
