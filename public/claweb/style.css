@@ -517,6 +517,10 @@ button {
   width: min(620px, 100%);
 }
 
+.appearance-modal-card {
+  width: min(560px, 100%);
+}
+
 .modal-header {
   display: flex;
   align-items: center;
@@ -533,6 +537,65 @@ button {
   grid-template-columns: minmax(0, 1fr) auto;
   gap: 8px;
   align-items: center;
+}
+
+.settings-grid {
+  display: grid;
+  gap: 12px;
+}
+
+.settings-grid span {
+  font-size: 12px;
+  color: var(--muted);
+}
+
+.settings-grid select {
+  width: 100%;
+  border: 1px solid rgba(26, 39, 68, 0.08);
+  background: rgba(255, 255, 255, 0.96);
+  color: var(--text);
+  border-radius: 14px;
+  padding: 10px 12px;
+}
+
+.appearance-preview {
+  margin-top: 14px;
+  padding: 14px;
+  border-radius: 18px;
+  background: var(--surface-2);
+  border: 1px solid rgba(26, 39, 68, 0.06);
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}
+
+.appearance-preview-copy {
+  min-width: 0;
+}
+
+.appearance-preview-title {
+  font-size: 15px;
+  font-weight: 700;
+}
+
+.appearance-preview-character {
+  margin-top: 4px;
+  font-size: 13px;
+  color: var(--muted);
+}
+
+.modal-actions {
+  margin-top: 14px;
+  display: flex;
+  justify-content: flex-end;
+  gap: 8px;
+}
+
+.modal-actions button:last-child {
+  padding: 10px 14px;
+  border-radius: 14px;
+  background: var(--primary-gradient);
+  color: white;
 }
 
 .search {

@@ -4,7 +4,7 @@
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
   <title>CLAWeb Entry</title>
-  <link rel="stylesheet" href="/claweb/style.css?v=20260312-26" />
+  <link rel="stylesheet" href="/claweb/style.css?v=20260312-27" />
 </head>
 <body>
   <main class="app">
@@ -78,6 +78,7 @@
       </div>
 
       <div id="more-menu" class="floating-menu hidden" role="menu" aria-hidden="true">
+        <button id="appearance-action" type="button" class="ghost" role="menuitem">外观设置</button>
         <button id="threads-action" type="button" class="ghost" role="menuitem">切换会话</button>
         <button id="disconnect-btn" type="button" class="ghost" role="menuitem">断开连接</button>
         <button id="logout-btn" type="button" class="ghost" role="menuitem">退出登录</button>
@@ -106,16 +107,58 @@
           <div id="threads-list" class="threads-list"></div>
         </div>
       </section>
+
+      <section id="appearance-modal" class="modal hidden" aria-hidden="true">
+        <div class="modal-card appearance-modal-card" role="dialog" aria-modal="true" aria-label="外观设置">
+          <header class="modal-header compact">
+            <h3>外观设置</h3>
+            <button id="appearance-close" type="button" class="mini-btn" aria-label="关闭">✕</button>
+          </header>
+          <div class="settings-grid">
+            <label class="row">
+              <span>空间名（登录页）</span>
+              <input id="appearance-title" type="text" placeholder="比如：CLAWeb Demo" />
+            </label>
+            <label class="row">
+              <span>角色名（聊天页）</span>
+              <input id="appearance-character" type="text" placeholder="比如：CLAWeb" />
+            </label>
+            <label class="row">
+              <span>头像模式</span>
+              <select id="appearance-avatar-mode">
+                <option value="emoji">Emoji</option>
+                <option value="image">图片链接</option>
+              </select>
+            </label>
+            <label class="row">
+              <span>头像内容</span>
+              <input id="appearance-avatar" type="text" placeholder="🌌 或 https://..." />
+            </label>
+          </div>
+          <div class="appearance-preview">
+            <div id="appearance-preview-avatar" class="brand-avatar">🌌</div>
+            <div class="appearance-preview-copy">
+              <div id="appearance-preview-title" class="appearance-preview-title">CLAWeb Demo</div>
+              <div id="appearance-preview-character" class="appearance-preview-character">CLAWeb</div>
+            </div>
+          </div>
+          <div class="modal-actions">
+            <button id="appearance-reset" type="button" class="ghost">恢复默认</button>
+            <button id="appearance-save" type="button">保存</button>
+          </div>
+        </div>
+      </section>
     </section>
   </main>
 
   <script>
     window.CLAWEB_UI = {
       title: "CLAWeb Demo",
+      characterName: "CLAWeb",
       avatar: "🌌",
       avatarMode: "emoji"
     };
   </script>
-  <script src="/claweb/app.js?v=20260312-25"></script>
+  <script src="/claweb/app.js?v=20260312-27"></script>
 </body>
 </html>

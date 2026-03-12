@@ -46,6 +46,14 @@ async function tryReadJson(resp) {
   }
 }
 
+const UI_STORAGE_KEY = "claweb:ui:branding:v1";
+const DEFAULT_UI = {
+  title: "CLAWeb Demo",
+  characterName: "CLAWeb",
+  avatar: "🌌",
+  avatarMode: "emoji",
+};
+
 const state = {
   ws: null,
   ready: false,
@@ -56,6 +64,7 @@ const state = {
   switchTarget: null,
   messageIndex: new Map(), // messageId -> { text, node }
   assistantName: null,
+  uiBranding: { ...DEFAULT_UI },
   composingReplyTo: null,
   pendingImage: null, // { file, dataUrl, filename, mime, compressedDataUrl?, compressedMime?, stats?, compressionPromise?, compressing? }
 };
@@ -79,6 +88,18 @@ const el = {
   searchToggle: document.getElementById("search-toggle"),
   searchModal: document.getElementById("search-modal"),
   searchClose: document.getElementById("search-close"),
+  appearanceAction: document.getElementById("appearance-action"),
+  appearanceModal: document.getElementById("appearance-modal"),
+  appearanceClose: document.getElementById("appearance-close"),
+  appearanceTitle: document.getElementById("appearance-title"),
+  appearanceCharacter: document.getElementById("appearance-character"),
+  appearanceAvatarMode: document.getElementById("appearance-avatar-mode"),
+  appearanceAvatar: document.getElementById("appearance-avatar"),
+  appearancePreviewAvatar: document.getElementById("appearance-preview-avatar"),
+  appearancePreviewTitle: document.getElementById("appearance-preview-title"),
+  appearancePreviewCharacter: document.getElementById("appearance-preview-character"),
+  appearanceReset: document.getElementById("appearance-reset"),
+  appearanceSave: document.getElementById("appearance-save"),
   searchInput: document.getElementById("search-input"),
   searchClear: document.getElementById("search-clear"),
   searchResults: document.getElementById("search-results"),
@@ -115,34 +136,73 @@ function setLoginError(msg = "") {
 }
 
 function getUiBranding() {
-  const ui = window.CLAWEB_UI || {};
-  return {
-    title: String(ui.title || "CLAWeb Demo").trim() || "CLAWeb Demo",
-    avatar: String(ui.avatar || "🌌").trim() || "🌌",
-    avatarMode: String(ui.avatarMode || "emoji").trim() || "emoji",
+  return { ...state.uiBranding };
+}
+
+function loadStoredUiBranding() {
+  let stored = {};
+  try {
+    stored = JSON.parse(window.localStorage.getItem(UI_STORAGE_KEY) || "null") || {};
+  } catch {
+    stored = {};
+  }
+  const base = { ...DEFAULT_UI, ...(window.CLAWEB_UI || {}), ...stored };
+  state.uiBranding = {
+    title: String(base.title || DEFAULT_UI.title).trim() || DEFAULT_UI.title,
+    characterName: String(base.characterName || DEFAULT_UI.characterName).trim() || DEFAULT_UI.characterName,
+    avatar: String(base.avatar || DEFAULT_UI.avatar).trim() || DEFAULT_UI.avatar,
+    avatarMode: String(base.avatarMode || DEFAULT_UI.avatarMode).trim() || DEFAULT_UI.avatarMode,
   };
 }
 
+function persistUiBranding() {
+  try {
+    window.localStorage.setItem(UI_STORAGE_KEY, JSON.stringify(state.uiBranding));
+  } catch {
+    // ignore
+  }
+}
+
+function applyAvatarNode(node, avatar, avatarMode) {
+  if (!node) return;
+  if (avatarMode === "image") {
+    node.innerHTML = `<img src="${escapeHtml(avatar)}" alt="avatar" />`;
+    node.classList.add("avatar-image-mode");
+  } else {
+    node.textContent = avatar;
+    node.classList.remove("avatar-image-mode");
+  }
+}
+
+function syncAppearancePreview(values = getUiBranding()) {
+  const title = String(values.title || DEFAULT_UI.title).trim() || DEFAULT_UI.title;
+  const characterName = String(values.characterName || DEFAULT_UI.characterName).trim() || DEFAULT_UI.characterName;
+  const avatar = String(values.avatar || DEFAULT_UI.avatar).trim() || DEFAULT_UI.avatar;
+  const avatarMode = String(values.avatarMode || DEFAULT_UI.avatarMode).trim() || DEFAULT_UI.avatarMode;
+
+  if (el.appearancePreviewTitle) el.appearancePreviewTitle.textContent = title;
+  if (el.appearancePreviewCharacter) el.appearancePreviewCharacter.textContent = characterName;
+  applyAvatarNode(el.appearancePreviewAvatar, avatar, avatarMode);
+}
+
+function fillAppearanceForm(values = getUiBranding()) {
+  if (el.appearanceTitle) el.appearanceTitle.value = values.title || DEFAULT_UI.title;
+  if (el.appearanceCharacter) el.appearanceCharacter.value = values.characterName || DEFAULT_UI.characterName;
+  if (el.appearanceAvatarMode) el.appearanceAvatarMode.value = values.avatarMode || DEFAULT_UI.avatarMode;
+  if (el.appearanceAvatar) el.appearanceAvatar.value = values.avatar || DEFAULT_UI.avatar;
+  syncAppearancePreview(values);
+}
+
 function applyUiBranding() {
-  const { title, avatar, avatarMode } = getUiBranding();
+  const { title, characterName, avatar, avatarMode } = getUiBranding();
 
   if (el.appTitle) el.appTitle.textContent = title;
-  if (el.brandTitle) el.brandTitle.textContent = title;
+  if (el.brandTitle) el.brandTitle.textContent = characterName;
   if (document?.title) document.title = title;
 
-  const applyAvatar = (node) => {
-    if (!node) return;
-    if (avatarMode === "image") {
-      node.innerHTML = `<img src="${escapeHtml(avatar)}" alt="avatar" />`;
-      node.classList.add("avatar-image-mode");
-    } else {
-      node.textContent = avatar;
-      node.classList.remove("avatar-image-mode");
-    }
-  };
-
-  applyAvatar(el.gateAvatar);
-  applyAvatar(el.brandAvatar);
+  applyAvatarNode(el.gateAvatar, avatar, avatarMode);
+  applyAvatarNode(el.brandAvatar, avatar, avatarMode);
+  syncAppearancePreview({ title, characterName, avatar, avatarMode });
 }
 
 function syncViewportHeight() {
@@ -219,6 +279,24 @@ function hideSearchModal() {
 
 function isSearchModalOpen() {
   return !!el.searchModal && !el.searchModal.classList.contains("hidden");
+}
+
+function showAppearanceModal() {
+  if (!el.appearanceModal) return;
+  fillAppearanceForm(getUiBranding());
+  el.appearanceModal.classList.remove("hidden");
+  el.appearanceModal.setAttribute("aria-hidden", "false");
+  window.setTimeout(() => el.appearanceTitle?.focus(), 0);
+}
+
+function hideAppearanceModal() {
+  if (!el.appearanceModal) return;
+  el.appearanceModal.classList.add("hidden");
+  el.appearanceModal.setAttribute("aria-hidden", "true");
+}
+
+function isAppearanceModalOpen() {
+  return !!el.appearanceModal && !el.appearanceModal.classList.contains("hidden");
 }
 
 function addMessageRich({
@@ -395,7 +473,7 @@ function renderSearchResults(results, query) {
       return state.session?.displayName || state.session?.identity || "You";
     }
     if (role === "assistant") {
-      return state.assistantName || window.CLAWEB_ASSISTANT_NAME || "Assistant";
+      return getUiBranding().characterName || state.assistantName || window.CLAWEB_ASSISTANT_NAME || "Assistant";
     }
     return "System";
   };
@@ -1283,6 +1361,7 @@ function logout() {
   if (el.imageName) el.imageName.textContent = "";
   hideMoreMenu();
   hideSearchModal();
+  hideAppearanceModal();
   hideThreadsModal();
   try {
     if (el.imageInput) el.imageInput.value = "";
@@ -1394,6 +1473,7 @@ function renderThreadsList(threads) {
   }
 }
 
+loadStoredUiBranding();
 applyUiBranding();
 syncViewportHeight();
 showLoginPanel();
@@ -1564,6 +1644,7 @@ if (el.searchInput) {
 if (el.searchToggle) {
   el.searchToggle.addEventListener("click", () => {
     hideMoreMenu();
+    hideAppearanceModal();
     if (isSearchModalOpen()) hideSearchModal();
     else showSearchModal();
   });
@@ -1588,6 +1669,43 @@ if (el.moreBtn) {
     toggleMoreMenu();
   });
 }
+
+if (el.appearanceAction) {
+  el.appearanceAction.addEventListener("click", () => {
+    hideMoreMenu();
+    hideSearchModal();
+    showAppearanceModal();
+  });
+}
+
+const onAppearanceInput = () => {
+  syncAppearancePreview({
+    title: el.appearanceTitle?.value || DEFAULT_UI.title,
+    characterName: el.appearanceCharacter?.value || DEFAULT_UI.characterName,
+    avatar: el.appearanceAvatar?.value || DEFAULT_UI.avatar,
+    avatarMode: el.appearanceAvatarMode?.value || DEFAULT_UI.avatarMode,
+  });
+};
+
+el.appearanceTitle?.addEventListener("input", onAppearanceInput);
+el.appearanceCharacter?.addEventListener("input", onAppearanceInput);
+el.appearanceAvatar?.addEventListener("input", onAppearanceInput);
+el.appearanceAvatarMode?.addEventListener("change", onAppearanceInput);
+el.appearanceClose?.addEventListener("click", hideAppearanceModal);
+el.appearanceReset?.addEventListener("click", () => {
+  fillAppearanceForm(DEFAULT_UI);
+});
+el.appearanceSave?.addEventListener("click", () => {
+  state.uiBranding = {
+    title: String(el.appearanceTitle?.value || DEFAULT_UI.title).trim() || DEFAULT_UI.title,
+    characterName: String(el.appearanceCharacter?.value || DEFAULT_UI.characterName).trim() || DEFAULT_UI.characterName,
+    avatar: String(el.appearanceAvatar?.value || DEFAULT_UI.avatar).trim() || DEFAULT_UI.avatar,
+    avatarMode: String(el.appearanceAvatarMode?.value || DEFAULT_UI.avatarMode).trim() || DEFAULT_UI.avatarMode,
+  };
+  persistUiBranding();
+  applyUiBranding();
+  hideAppearanceModal();
+});
 
 if (el.threadsAction) {
   el.threadsAction.addEventListener("click", async () => {
@@ -1640,8 +1758,20 @@ if (el.searchModal) {
   el.searchModal.addEventListener("touchstart", onSearchBackdrop, { passive: true });
 }
 
+if (el.appearanceModal) {
+  const onAppearanceBackdrop = (e) => {
+    if (e.target === el.appearanceModal) hideAppearanceModal();
+  };
+  el.appearanceModal.addEventListener("click", onAppearanceBackdrop);
+  el.appearanceModal.addEventListener("touchstart", onAppearanceBackdrop, { passive: true });
+}
+
 document.addEventListener("keydown", (e) => {
   if (e.key !== "Escape") return;
+  if (isAppearanceModalOpen()) {
+    hideAppearanceModal();
+    return;
+  }
   if (isSearchModalOpen()) {
     hideSearchModal();
     return;
