@@ -18,12 +18,17 @@ export function buildInboundCtx(input: BuildInboundCtxInput) {
   const chatType = input.roomId ? "group" : "direct";
   const peerLabel = input.roomId ? `room:${input.roomId}` : `user:${input.userId}`;
 
+  const mediaUrl = input.mediaUrl?.trim() || undefined;
+  const mediaType = input.mediaType?.trim() || undefined;
+
   return input.runtime.channel.reply.finalizeInboundContext({
     Body: input.text,
     RawBody: input.text,
     CommandBody: input.text,
-    MediaUrl: input.mediaUrl,
-    MediaType: input.mediaType,
+    MediaUrl: mediaUrl,
+    MediaUrls: mediaUrl ? [mediaUrl] : undefined,
+    MediaType: mediaType,
+    MediaTypes: mediaUrl ? [mediaType || "application/octet-stream"] : undefined,
     From: `claweb:${input.userId}`,
     To: input.roomId ? `claweb:room:${input.roomId}` : `claweb:${input.userId}`,
     SessionKey: input.sessionKey,
