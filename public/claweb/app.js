@@ -91,6 +91,7 @@ const el = {
   imageBanner: document.getElementById("image-banner"),
   imagePreview: document.getElementById("image-preview"),
   imageName: document.getElementById("image-name"),
+  imageHint: document.getElementById("image-hint"),
   imageCancel: document.getElementById("image-cancel"),
 };
 
@@ -819,6 +820,7 @@ function setPendingImage(file, dataUrl) {
 
   if (el.imagePreview) el.imagePreview.src = String(dataUrl || "");
   if (el.imageName) el.imageName.textContent = state.pendingImage.filename;
+  if (el.imageHint) el.imageHint.textContent = "压缩中…（如果图片本来就很小，可能不会压缩）";
   el.imageBanner?.classList.remove("hidden");
 
   // Best-effort client-side compression to keep uploads fast on mobile.
@@ -838,12 +840,37 @@ function setPendingImage(file, dataUrl) {
       current.compressedMime = res.mime;
       current.stats = res.stats;
 
+      const srcKb = res.stats?.srcBytes ? Math.round(res.stats.srcBytes / 1024) : null;
+      const outKb = res.stats?.outBytes ? Math.round(res.stats.outBytes / 1024) : null;
+
       if (el.imageName) {
-        const srcKb = res.stats?.srcBytes ? Math.round(res.stats.srcBytes / 1024) : null;
-        const outKb = res.stats?.outBytes ? Math.round(res.stats.outBytes / 1024) : null;
-        if (srcKb && outKb) {
+        if (srcKb && outKb && outKb < srcKb) {
           el.imageName.textContent = `${current.filename} (${srcKb}KB→${outKb}KB)`;
+        } else if (srcKb) {
+          el.imageName.textContent = `${current.filename} (${srcKb}KB)`;
         }
+      }
+
+      if (el.imageHint) {
+        if (srcKb && outKb && outKb < srcKb) {
+          el.imageHint.textContent = `已压缩：${srcKb}KB→${outKb}KB（发送时会用压缩后的图片）`;
+        } else if (srcKb) {
+          el.imageHint.textContent = `无需压缩：约 ${srcKb}KB（直接发送原图）`;
+        } else {
+          el.imageHint.textContent = "已就绪（发送）";
+        }
+      }
+
+      // Debug helper: log stats to console for verification.
+      try {
+        console.debug("[claweb] image compress", {
+          filename: current.filename,
+          mimeIn: current.mime,
+          mimeOut: current.compressedMime,
+          stats: current.stats,
+        });
+      } catch {
+        // ignore
       }
     })
     .catch(() => {
@@ -856,6 +883,7 @@ function clearPendingImage() {
   el.imageBanner?.classList.add("hidden");
   if (el.imagePreview) el.imagePreview.src = "";
   if (el.imageName) el.imageName.textContent = "";
+  if (el.imageHint) el.imageHint.textContent = "";
   try {
     if (el.imageInput) el.imageInput.value = "";
   } catch {}
