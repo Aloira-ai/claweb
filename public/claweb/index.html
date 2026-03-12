@@ -32,8 +32,22 @@
           <h2>CLAWeb Chat</h2>
           <p id="session-desc" class="subtitle"></p>
         </div>
-        <div id="conn-status" class="status status-offline">Offline</div>
+        <div class="topbar-actions">
+          <button id="threads-btn" type="button" class="ghost">Threads</button>
+          <div id="conn-status" class="status status-offline">Offline</div>
+        </div>
       </header>
+
+      <section id="threads-modal" class="modal hidden" aria-hidden="true">
+        <div class="modal-card" role="dialog" aria-modal="true" aria-label="Threads">
+          <header class="modal-header">
+            <h3>Threads</h3>
+            <button id="threads-close" type="button" class="ghost">Close</button>
+          </header>
+          <p class="subtitle">Switching thread will ask you to login for that identity.</p>
+          <div id="threads-list" class="threads-list"></div>
+        </div>
+      </section>
 
       <section id="messages" class="messages" aria-live="polite"></section>
 

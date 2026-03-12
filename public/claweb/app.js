@@ -52,6 +52,8 @@ const state = {
   session: null,
   pendingById: new Map(),
   renderedMessageKeys: new Set(),
+  threads: null,
+  switchTarget: null,
 };
 
 const el = {
@@ -67,6 +69,10 @@ const el = {
   sendBtn: document.getElementById("send-btn"),
   disconnectBtn: document.getElementById("disconnect-btn"),
   logoutBtn: document.getElementById("logout-btn"),
+  threadsBtn: document.getElementById("threads-btn"),
+  threadsModal: document.getElementById("threads-modal"),
+  threadsClose: document.getElementById("threads-close"),
+  threadsList: document.getElementById("threads-list"),
 };
 
 function setStatus(text, cls) {
@@ -315,6 +321,13 @@ async function login() {
       return;
     }
 
+    if (state.switchTarget && session.identity && session.identity !== state.switchTarget) {
+      setLoginError(`Logged in as ${session.identity}, expected ${state.switchTarget}.`);
+      state.session = null;
+      return;
+    }
+
+    state.switchTarget = null;
     state.session = session;
     state.renderedMessageKeys.clear();
     el.messages.innerHTML = "";
@@ -484,6 +497,94 @@ function logout() {
   showLoginPanel();
 }
 
+function showThreadsModal() {
+  if (!el.threadsModal) return;
+  el.threadsModal.classList.remove("hidden");
+  el.threadsModal.setAttribute("aria-hidden", "false");
+}
+
+function hideThreadsModal() {
+  if (!el.threadsModal) return;
+  el.threadsModal.classList.add("hidden");
+  el.threadsModal.setAttribute("aria-hidden", "true");
+}
+
+async function loadThreads() {
+  if (!state.session) throw new Error("not_logged_in");
+
+  const { resp, data } = await fetchJsonWithFallback(
+    "/threads",
+    "/claweb/threads",
+    {
+      method: "GET",
+      headers: {
+        "x-claweb-token": state.session.token,
+      },
+    },
+  );
+
+  if (!resp.ok || !data || data.ok !== true) {
+    throw new Error(data?.error || `threads_failed_${resp.status}`);
+  }
+
+  state.threads = Array.isArray(data.threads) ? data.threads : [];
+  return state.threads;
+}
+
+function renderThreadsList(threads) {
+  if (!el.threadsList) return;
+  el.threadsList.innerHTML = "";
+
+  if (!threads || threads.length === 0) {
+    const empty = document.createElement("div");
+    empty.className = "subtitle";
+    empty.textContent = "No threads available.";
+    el.threadsList.appendChild(empty);
+    return;
+  }
+
+  for (const t of threads) {
+    const item = document.createElement("div");
+    item.className = "thread-item";
+
+    const meta = document.createElement("div");
+    meta.className = "thread-meta";
+
+    const title = document.createElement("div");
+    title.className = "thread-title";
+    title.textContent = t.displayName || t.identity || t.userId || "thread";
+
+    const sub = document.createElement("div");
+    sub.className = "thread-sub";
+    sub.textContent = `${t.userId || ""} / ${t.roomId || ""} / ${t.clientId || ""}`;
+
+    meta.appendChild(title);
+    meta.appendChild(sub);
+
+    const btn = document.createElement("button");
+    btn.type = "button";
+    btn.className = "ghost";
+    btn.textContent = state.session && t.identity === state.session.identity ? "Current" : "Switch";
+    btn.disabled = state.session && t.identity === state.session.identity;
+
+    btn.addEventListener("click", () => {
+      // Switching identity requires a new login token.
+      state.switchTarget = t.identity || null;
+      hideThreadsModal();
+      logout();
+      if (el.passphrase) {
+        el.passphrase.value = "";
+        el.passphrase.focus();
+      }
+      setLoginError(`Switching to ${t.displayName || t.identity}. Please enter passphrase.`);
+    });
+
+    item.appendChild(meta);
+    item.appendChild(btn);
+    el.threadsList.appendChild(item);
+  }
+}
+
 showLoginPanel();
 setStatus("Offline", "status-offline");
 
@@ -503,3 +604,31 @@ el.input.addEventListener("keydown", (event) => {
 });
 el.disconnectBtn.addEventListener("click", closeSocket);
 el.logoutBtn.addEventListener("click", logout);
+
+if (el.threadsBtn) {
+  el.threadsBtn.addEventListener("click", async () => {
+    if (!state.session) {
+      addMessage("system", "Please login first.");
+      return;
+    }
+    showThreadsModal();
+    el.threadsList.textContent = "Loading...";
+    try {
+      const threads = await loadThreads();
+      renderThreadsList(threads);
+    } catch (e) {
+      el.threadsList.textContent = "Failed to load threads.";
+      addMessage("system", `Threads error: ${String(e?.message || e)}`);
+    }
+  });
+}
+
+if (el.threadsClose) {
+  el.threadsClose.addEventListener("click", hideThreadsModal);
+}
+
+if (el.threadsModal) {
+  el.threadsModal.addEventListener("click", (e) => {
+    if (e.target === el.threadsModal) hideThreadsModal();
+  });
+}

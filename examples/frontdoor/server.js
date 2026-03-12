@@ -477,6 +477,28 @@ const server = http.createServer(async (req, res) => {
     return json(res, 200, { ok: true, messages });
   }
 
+  if (req.method === "GET" && url.pathname === "/threads") {
+    const session = requireSession(req);
+    if (!session) return json(res, 401, { ok: false, error: "unauthorized" });
+
+    let cfg;
+    try {
+      cfg = await loadLoginConfig();
+    } catch {
+      return json(res, 500, { ok: false, error: "login_not_configured" });
+    }
+
+    const threads = Object.entries(cfg || {}).map(([identity, entry]) => ({
+      identity,
+      displayName: String(entry?.displayName || identity),
+      userId: String(entry?.userId || ""),
+      roomId: String(entry?.roomId || ""),
+      clientId: String(entry?.clientId || ""),
+    }));
+
+    return json(res, 200, { ok: true, threads });
+  }
+
   // compat aliases
   if (url.pathname.startsWith("/claweb/")) {
     // strip prefix and re-dispatch
