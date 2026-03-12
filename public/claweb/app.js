@@ -55,6 +55,7 @@ const state = {
   threads: null,
   switchTarget: null,
   messageIndex: new Map(), // messageId -> { text, node }
+  assistantName: null,
 };
 
 const el = {
@@ -197,7 +198,7 @@ function renderSearchResults(results, query) {
       return state.session?.displayName || state.session?.identity || "You";
     }
     if (role === "assistant") {
-      return window.CLAWEB_ASSISTANT_NAME || "Assistant";
+      return state.assistantName || window.CLAWEB_ASSISTANT_NAME || "Assistant";
     }
     return "System";
   };
@@ -431,6 +432,17 @@ async function loadRecentHistory() {
   }
 }
 
+async function loadUiConfig() {
+  try {
+    const { resp, data } = await fetchJsonWithFallback("/config", "/claweb/config", { method: "GET" });
+    if (resp.ok && data?.ok) {
+      state.assistantName = data.assistantName ? String(data.assistantName) : null;
+    }
+  } catch {
+    // ignore
+  }
+}
+
 async function login() {
   const passphrase = el.passphrase.value.trim();
   if (!passphrase) {
@@ -471,6 +483,7 @@ async function login() {
     }
 
     state.switchTarget = null;
+    await loadUiConfig();
     state.session = session;
     state.renderedMessageKeys.clear();
     el.messages.innerHTML = "";

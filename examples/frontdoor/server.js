@@ -499,6 +499,14 @@ const server = http.createServer(async (req, res) => {
     return json(res, 200, { ok: true, threads });
   }
 
+  if (req.method === "GET" && url.pathname === "/config") {
+    // Public, non-sensitive UI config.
+    return json(res, 200, {
+      ok: true,
+      assistantName: String(ENV.CLAWEB_ASSISTANT_NAME || "").trim() || null,
+    });
+  }
+
   // compat aliases
   if (url.pathname.startsWith("/claweb/")) {
     // strip prefix and re-dispatch
