@@ -60,13 +60,17 @@ body {
 .topbar-actions {
   display: flex;
   align-items: center;
+  justify-content: flex-end;
   gap: 8px;
+  flex-wrap: wrap;
 }
 
 .search {
-  width: min(280px, 48vw);
+  flex: 1 1 200px;
+  width: auto;
   padding: 8px 10px;
   border-radius: 999px;
+  min-width: 160px;
 }
 
 .search-results {
@@ -374,6 +378,17 @@ button:disabled {
   .topbar {
     align-items: flex-start;
     flex-direction: column;
+  }
+
+  .topbar-actions {
+    width: 100%;
+    justify-content: flex-start;
+  }
+
+  .search {
+    flex: 1 1 100%;
+    width: 100%;
+    min-width: 0;
   }
 
   .actions.secondary {
