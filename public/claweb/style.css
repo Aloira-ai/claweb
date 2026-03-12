@@ -495,26 +495,27 @@ button:disabled {
 
 @media (max-width: 720px) {
   .app {
-    padding: 10px;
+    padding: 8px;
     align-items: stretch;
   }
 
   .panel {
-    padding: 12px;
+    padding: 10px;
     border-radius: 10px;
   }
 
   .topbar {
     align-items: flex-start;
     flex-direction: column;
+    gap: 8px;
   }
 
   .topbar-actions {
     width: 100%;
     display: grid;
-    grid-template-columns: 1fr auto auto;
+    grid-template-columns: 1fr 1fr;
     align-items: center;
-    gap: 8px;
+    gap: 6px;
   }
 
   .search {
@@ -522,25 +523,35 @@ button:disabled {
     flex: 1 1 100%;
     width: 100%;
     min-width: 0;
+    padding: 8px 10px;
+  }
+
+  #conn-status {
+    grid-column: 1 / -1;
+    justify-self: start;
+    padding: 5px 10px;
+    font-size: 11px;
   }
 
   .search-results {
-    max-height: 34dvh;
+    max-height: 28dvh;
     padding: 8px;
   }
 
   .search-hit {
-    padding: 9px 10px;
+    padding: 8px 9px;
   }
 
   .messages {
-    min-height: 240px;
-    max-height: 52dvh;
-    padding: 12px;
+    min-height: 220px;
+    max-height: 46dvh;
+    padding: 10px;
+    gap: 8px;
   }
 
   .msg {
     max-width: 92%;
+    padding: 9px 10px;
   }
 
   .reply-banner,
@@ -551,24 +562,27 @@ button:disabled {
   .reply-banner {
     align-items: flex-start;
     flex-direction: column;
+    gap: 6px;
   }
 
   .reply-banner button {
     align-self: flex-end;
+    padding: 8px 12px;
   }
 
   .image-banner {
-    grid-template-columns: 48px 1fr;
+    grid-template-columns: 44px 1fr;
     grid-template-areas:
       "preview meta"
       "remove remove";
     align-items: start;
+    gap: 8px;
   }
 
   .image-preview {
     grid-area: preview;
-    width: 48px;
-    height: 48px;
+    width: 44px;
+    height: 44px;
   }
 
   .image-banner-meta {
@@ -587,28 +601,38 @@ button:disabled {
   #image-cancel {
     grid-area: remove;
     width: 100%;
+    padding: 8px 12px;
   }
 
   #message-input {
-    min-height: 88px;
+    min-height: 64px;
+    padding: 9px 10px;
+  }
+
+  .composer {
+    gap: 6px;
   }
 
   .composer-actions {
     display: grid;
     grid-template-columns: 1fr 1fr;
-    gap: 8px;
+    gap: 6px;
   }
 
   .composer-actions button {
     width: 100%;
+    padding: 9px 12px;
   }
 
   .actions.secondary {
+    margin-top: 8px;
+    gap: 6px;
     justify-content: stretch;
   }
 
   .actions.secondary button {
     flex: 1;
+    padding: 9px 12px;
   }
 }
 
@@ -622,17 +646,21 @@ button:disabled {
   }
 
   #threads-btn,
-  #search-clear,
-  #conn-status {
+  #search-clear {
     width: 100%;
     text-align: center;
   }
 
   .messages {
-    max-height: 50dvh;
+    min-height: 200px;
+    max-height: 42dvh;
   }
 
   .msg {
     max-width: 96%;
+  }
+
+  #message-input {
+    min-height: 56px;
   }
 }
