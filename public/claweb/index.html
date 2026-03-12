@@ -38,11 +38,11 @@
         </div>
       </header>
 
-      <section id="threads-modal" class="modal hidden" aria-hidden="true">
+      <section id="threads-modal" class="modal hidden" aria-hidden="true" onclick="if(event.target===this){this.classList.add('hidden');this.setAttribute('aria-hidden','true');}">
         <div class="modal-card" role="dialog" aria-modal="true" aria-label="Threads">
           <header class="modal-header">
             <h3>Threads</h3>
-            <button id="threads-close" type="button" class="ghost">Close</button>
+            <button id="threads-close" type="button" class="ghost" onclick="event.preventDefault();event.stopPropagation();const m=document.getElementById('threads-modal');if(m){m.classList.add('hidden');m.setAttribute('aria-hidden','true');}">Close</button>
           </header>
           <p class="subtitle">Switching thread will ask you to login for that identity.</p>
           <div id="threads-list" class="threads-list"></div>
@@ -63,6 +63,6 @@
     </section>
   </main>
 
-  <script src="/claweb/app.js?v=20260312-3"></script>
+  <script src="/claweb/app.js?v=20260312-4"></script>
 </body>
 </html>
