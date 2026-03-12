@@ -31,6 +31,10 @@ body {
   align-items: center;
 }
 
+#chat-panel {
+  min-height: 0;
+}
+
 .panel {
   background: var(--card);
   border: 1px solid var(--line);
@@ -309,6 +313,7 @@ button:disabled {
   gap: 10px;
   min-height: 280px;
   max-height: 58dvh;
+  -webkit-overflow-scrolling: touch;
 }
 
 .msg {
@@ -494,14 +499,32 @@ button:disabled {
 }
 
 @media (max-width: 720px) {
+  body {
+    position: fixed;
+    inset: 0;
+    width: 100%;
+    height: 100dvh;
+    overflow: hidden;
+  }
+
   .app {
     padding: 8px;
     align-items: stretch;
+    height: 100dvh;
+    min-height: 100dvh;
   }
 
   .panel {
     padding: 10px;
     border-radius: 10px;
+  }
+
+  #chat-panel {
+    display: grid;
+    grid-template-rows: auto auto minmax(0, 1fr) auto auto;
+    height: calc(100dvh - 16px);
+    max-height: calc(100dvh - 16px);
+    overflow: hidden;
   }
 
   .topbar {
@@ -534,8 +557,10 @@ button:disabled {
   }
 
   .search-results {
-    max-height: 28dvh;
+    max-height: 24dvh;
+    min-height: 0;
     padding: 8px;
+    overflow: auto;
   }
 
   .search-hit {
@@ -543,8 +568,9 @@ button:disabled {
   }
 
   .messages {
-    min-height: 220px;
-    max-height: 46dvh;
+    min-height: 0;
+    max-height: none;
+    height: 100%;
     padding: 10px;
     gap: 8px;
   }
@@ -605,7 +631,8 @@ button:disabled {
   }
 
   #message-input {
-    min-height: 64px;
+    min-height: 56px;
+    max-height: 22dvh;
     padding: 9px 10px;
   }
 
@@ -637,6 +664,11 @@ button:disabled {
 }
 
 @media (max-width: 420px) {
+  #chat-panel {
+    height: calc(100dvh - 12px);
+    max-height: calc(100dvh - 12px);
+  }
+
   .topbar-actions {
     grid-template-columns: 1fr 1fr;
   }
@@ -652,8 +684,7 @@ button:disabled {
   }
 
   .messages {
-    min-height: 200px;
-    max-height: 42dvh;
+    min-height: 0;
   }
 
   .msg {
@@ -661,6 +692,7 @@ button:disabled {
   }
 
   #message-input {
-    min-height: 56px;
+    min-height: 52px;
+    max-height: 20dvh;
   }
 }
