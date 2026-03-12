@@ -22,19 +22,11 @@ function extractMediaRefsFromText(text: string): MediaCandidate[] {
   if (!raw) return [];
   const out: MediaCandidate[] = [];
   const seen = new Set<string>();
-  const mediaTokenMatches = raw.match(/MEDIA\s*:\s*(data:image\/[^\s"')]+|https?:\/\/[^\s"')]+)/gi) || [];
+  const mediaTokenMatches = raw.match(/MEDIA\s*:\s*(data:(?:image|video)\/[^\s"')]+|https?:\/\/[^\s"')]+)/gi) || [];
   for (const item of mediaTokenMatches) {
     const ref = item.replace(/^MEDIA\s*:\s*/i, "").trim();
     const mediaType = guessMediaType(ref);
-    if (!ref || seen.has(ref) || !isImageMediaType(mediaType)) continue;
-    seen.add(ref);
-    out.push({ ref, mediaType });
-  }
-  const urlMatches = raw.match(/https?:\/\/[^\s"')]+/gi) || [];
-  for (const item of urlMatches) {
-    const ref = String(item || "").trim();
-    const mediaType = guessMediaType(ref);
-    if (!ref || seen.has(ref) || !isImageMediaType(mediaType)) continue;
+    if (!ref || seen.has(ref)) continue;
     seen.add(ref);
     out.push({ ref, mediaType });
   }
@@ -89,26 +81,24 @@ function guessMediaType(ref: string): string | undefined {
   const dataMatch = raw.match(/^data:([^;,]+)[;,]/i);
   if (dataMatch?.[1]) return dataMatch[1].trim().toLowerCase();
 
-  try {
-    const parsed = new URL(raw);
-    const host = parsed.hostname.toLowerCase();
-    const pathname = parsed.pathname.toLowerCase();
-    if ((host === "gpi.otd.us.kg" || host.endsWith(".otd.us.kg")) && pathname.startsWith("/images/")) {
-      return "image/jpeg";
-    }
-  } catch {}
-
   const cleaned = raw.replace(/[?#].*$/, "").toLowerCase();
   if (cleaned.endsWith(".png")) return "image/png";
   if (cleaned.endsWith(".jpg") || cleaned.endsWith(".jpeg")) return "image/jpeg";
   if (cleaned.endsWith(".webp")) return "image/webp";
   if (cleaned.endsWith(".gif")) return "image/gif";
   if (cleaned.endsWith(".svg")) return "image/svg+xml";
+  if (cleaned.endsWith(".bmp")) return "image/bmp";
+  if (cleaned.endsWith(".avif")) return "image/avif";
+  if (cleaned.endsWith(".mp4")) return "video/mp4";
+  if (cleaned.endsWith(".webm")) return "video/webm";
+  if (cleaned.endsWith(".mov")) return "video/quicktime";
+  if (cleaned.endsWith(".m4v")) return "video/x-m4v";
+  if (cleaned.endsWith(".ogv")) return "video/ogg";
   return undefined;
 }
 
-function isImageMediaType(mediaType: string | undefined): boolean {
-  return Boolean(mediaType && mediaType.startsWith("image/"));
+function isRenderableMediaType(mediaType: string | undefined): boolean {
+  return Boolean(mediaType && /^(image|video)\//.test(mediaType));
 }
 
 function pushCandidate(out: MediaCandidate[], seen: Set<string>, ref: unknown, mediaType?: unknown) {
@@ -116,7 +106,7 @@ function pushCandidate(out: MediaCandidate[], seen: Set<string>, ref: unknown, m
   const value = ref.trim();
   if (!value || seen.has(value)) return;
   const type = normalizeMediaType(mediaType) || guessMediaType(value);
-  if (!isImageMediaType(type)) return;
+  if (type && !isRenderableMediaType(type)) return;
   seen.add(value);
   out.push({ ref: value, mediaType: type });
 }
@@ -172,6 +162,29 @@ async function filePathToDataUrl(filePath: string, mediaType: string): Promise<s
   return `data:${mediaType};base64,${buf.toString("base64")}`;
 }
 
+async function probeRemoteMediaType(ref: string): Promise<string | undefined> {
+  const tryFetch = async (method: "HEAD" | "GET") => {
+    const controller = new AbortController();
+    const timer = setTimeout(() => controller.abort(), 4000);
+    try {
+      const response = await fetch(ref, {
+        method,
+        redirect: "follow",
+        signal: controller.signal,
+        headers: method === "GET" ? { Range: "bytes=0-0" } : undefined,
+      });
+      const mediaType = normalizeMediaType(response.headers.get("content-type"));
+      return isRenderableMediaType(mediaType) ? mediaType : undefined;
+    } catch {
+      return undefined;
+    } finally {
+      clearTimeout(timer);
+    }
+  };
+
+  return (await tryFetch("HEAD")) || (await tryFetch("GET"));
+}
+
 async function resolveMedia(payload: unknown): Promise<{
   mediaUrl?: string;
   mediaType?: string;
@@ -180,10 +193,10 @@ async function resolveMedia(payload: unknown): Promise<{
   const candidate = collectMediaCandidates(payload)[0];
   if (!candidate) return {};
 
-  const mediaType = candidate.mediaType || guessMediaType(candidate.ref);
-  if (!isImageMediaType(mediaType)) return {};
+  const mediaType = candidate.mediaType || guessMediaType(candidate.ref) || (/^https?:\/\//i.test(candidate.ref) ? await probeRemoteMediaType(candidate.ref) : undefined);
+  if (!isRenderableMediaType(mediaType)) return {};
 
-  if (/^data:image\//i.test(candidate.ref)) {
+  if (/^data:(image|video)\//i.test(candidate.ref)) {
     return { mediaDataUrl: candidate.ref, mediaType };
   }
 
@@ -206,7 +219,7 @@ export function createWsDeliver(ws: WebSocket, messageId: string) {
     try {
       const payloadKeys = payload && typeof payload === "object" ? Object.keys(payload as Record<string, unknown>).slice(0, 24) : [];
       console.log(
-        `[claweb][deliver] messageId=${messageId} text=${text ? "yes" : "no"} candidates=${candidates.length} mediaUrl=${media.mediaUrl ? "yes" : "no"} mediaDataUrl=${media.mediaDataUrl ? "yes" : "no"} keys=${payloadKeys.join(",")}`,
+        `[claweb][deliver] messageId=${messageId} text=${text ? "yes" : "no"} candidates=${candidates.length} mediaUrl=${media.mediaUrl ? "yes" : "no"} mediaDataUrl=${media.mediaDataUrl ? "yes" : "no"} mediaType=${media.mediaType || "none"} keys=${payloadKeys.join(",")}`,
       );
     } catch {
       // ignore logging failure

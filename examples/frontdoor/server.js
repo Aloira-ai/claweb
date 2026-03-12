@@ -155,6 +155,57 @@ function buildAbsoluteMediaUrl(host, relUrl) {
   return safeHost ? `https://${safeHost}${relUrl}` : relUrl;
 }
 
+function guessRenderableMediaType(ref) {
+  const raw = String(ref || "").trim();
+  if (!raw) return "";
+  const dataMatch = raw.match(/^data:([^;,]+)[;,]/i);
+  if (dataMatch?.[1]) return String(dataMatch[1]).trim().toLowerCase();
+  const clean = raw.split("?")[0].split("#")[0].toLowerCase();
+  if (clean.endsWith(".png")) return "image/png";
+  if (clean.endsWith(".jpg") || clean.endsWith(".jpeg")) return "image/jpeg";
+  if (clean.endsWith(".gif")) return "image/gif";
+  if (clean.endsWith(".webp")) return "image/webp";
+  if (clean.endsWith(".svg")) return "image/svg+xml";
+  if (clean.endsWith(".bmp")) return "image/bmp";
+  if (clean.endsWith(".avif")) return "image/avif";
+  if (clean.endsWith(".mp4")) return "video/mp4";
+  if (clean.endsWith(".webm")) return "video/webm";
+  if (clean.endsWith(".mov")) return "video/quicktime";
+  if (clean.endsWith(".m4v")) return "video/x-m4v";
+  if (clean.endsWith(".ogv")) return "video/ogg";
+  return "";
+}
+
+function isRenderableMediaType(mediaType) {
+  return /^(image|video)\//i.test(String(mediaType || "").trim());
+}
+
+async function probeRenderableMediaType(ref) {
+  const raw = String(ref || "").trim();
+  if (!/^https?:\/\//i.test(raw)) return "";
+
+  const tryFetch = async (method) => {
+    const controller = new AbortController();
+    const timer = setTimeout(() => controller.abort(), 4000);
+    try {
+      const response = await fetch(raw, {
+        method,
+        redirect: "follow",
+        signal: controller.signal,
+        headers: method === "GET" ? { Range: "bytes=0-0" } : undefined,
+      });
+      const mediaType = String(response.headers.get("content-type") || "").trim().toLowerCase();
+      return isRenderableMediaType(mediaType) ? mediaType : "";
+    } catch {
+      return "";
+    } finally {
+      clearTimeout(timer);
+    }
+  };
+
+  return (await tryFetch("HEAD")) || (await tryFetch("GET"));
+}
+
 function historyKey({ userId, roomId, clientId }) {
   return [safeFileSegment(userId), safeFileSegment(roomId || "direct"), safeFileSegment(clientId)].join("__");
 }
@@ -693,11 +744,9 @@ wss.on("connection", (clientWs, req) => {
         const incomingMediaType = String(frame.mediaType || "").trim();
         const incomingMediaDataUrl = String(frame.mediaDataUrl || "").trim();
         const textHasMediaToken = /MEDIA\s*:/i.test(text);
-        const textImageUrls = Array.from(text.matchAll(/https?:\/\/[^\s"')]+/gi), (m) => String(m[0] || "").trim())
-          .filter(Boolean)
-          .filter((url) => /\.(png|jpe?g|gif|webp|svg|bmp|avif)(?:$|[?#])/i.test(url) || /^https?:\/\/gpi\.otd\.us\.kg\/images\//i.test(url));
-        let mediaUrl = incomingMediaUrl || incomingMediaUrls[0] || textImageUrls[0] || "";
-        let mediaType = incomingMediaType || "";
+        const textMediaRefs = Array.from(text.matchAll(/MEDIA\s*:\s*(data:(?:image|video)\/[^\s"')]+|https?:\/\/[^\s"')]+)/gi), (m) => String(m[1] || "").trim()).filter(Boolean);
+        let mediaUrl = incomingMediaUrl || incomingMediaUrls[0] || "";
+        let mediaType = incomingMediaType || guessRenderableMediaType(mediaUrl) || "";
 
         log("info", "assistant_frame", {
           userId: state.session.userId,
@@ -706,7 +755,7 @@ wss.on("connection", (clientWs, req) => {
           hasText: Boolean(text),
           textPreview: text ? text.slice(0, 180) : null,
           textHasMediaToken,
-          textImageUrlCount: textImageUrls.length,
+          textMediaRefCount: textMediaRefs.length,
           hasMediaUrl: Boolean(incomingMediaUrl),
           mediaUrlsCount: incomingMediaUrls.length,
           hasMediaDataUrl: Boolean(incomingMediaDataUrl),
@@ -714,15 +763,17 @@ wss.on("connection", (clientWs, req) => {
           keys: Object.keys(frame || {}),
         });
 
+        if (!mediaUrl && textMediaRefs.length > 0) {
+          const ref = textMediaRefs[0];
+          const probedType = guessRenderableMediaType(ref) || (await probeRenderableMediaType(ref));
+          if (isRenderableMediaType(probedType)) {
+            mediaUrl = ref;
+            mediaType = probedType;
+          }
+        }
+
         if (!mediaType && mediaUrl) {
-          if (/^https?:\/\/gpi\.otd\.us\.kg\/images\//i.test(mediaUrl)) mediaType = "image/jpeg";
-          else if (/\.png(?:$|[?#])/i.test(mediaUrl)) mediaType = "image/png";
-          else if (/\.jpe?g(?:$|[?#])/i.test(mediaUrl)) mediaType = "image/jpeg";
-          else if (/\.gif(?:$|[?#])/i.test(mediaUrl)) mediaType = "image/gif";
-          else if (/\.webp(?:$|[?#])/i.test(mediaUrl)) mediaType = "image/webp";
-          else if (/\.svg(?:$|[?#])/i.test(mediaUrl)) mediaType = "image/svg+xml";
-          else if (/\.bmp(?:$|[?#])/i.test(mediaUrl)) mediaType = "image/bmp";
-          else if (/\.avif(?:$|[?#])/i.test(mediaUrl)) mediaType = "image/avif";
+          mediaType = guessRenderableMediaType(mediaUrl) || (await probeRenderableMediaType(mediaUrl));
         }
 
         if (!mediaUrl && incomingMediaDataUrl) {

@@ -393,16 +393,28 @@ function addMessageRich({
   body.textContent = text;
 
   if (mediaUrl && isProbablyImageMedia(mediaUrl, mediaType)) {
-    const imgWrap = document.createElement("div");
-    imgWrap.className = "msg-media";
+    const mediaWrap = document.createElement("div");
+    mediaWrap.className = "msg-media";
 
     const img = document.createElement("img");
     img.src = String(mediaUrl);
     img.alt = "image";
     img.loading = "lazy";
-    imgWrap.appendChild(img);
+    mediaWrap.appendChild(img);
 
-    body.appendChild(imgWrap);
+    body.appendChild(mediaWrap);
+  } else if (mediaUrl && isProbablyVideoMedia(mediaUrl, mediaType)) {
+    const mediaWrap = document.createElement("div");
+    mediaWrap.className = "msg-media";
+
+    const video = document.createElement("video");
+    video.src = String(mediaUrl);
+    video.controls = true;
+    video.preload = "metadata";
+    video.playsInline = true;
+    mediaWrap.appendChild(video);
+
+    body.appendChild(mediaWrap);
   }
 
   node.appendChild(body);
@@ -596,18 +608,10 @@ function normalizeStringArray(value) {
 function guessMediaTypeFromUrl(url) {
   const raw = normalizeText(url);
   if (!raw) return "";
-  if (raw.startsWith("data:image/")) {
-    const m = raw.match(/^data:(image\/[^;,]+)[;,]/i);
-    return normalizeText(m?.[1] || "image/*");
+  if (/^data:(image|video)\//i.test(raw)) {
+    const m = raw.match(/^data:((?:image|video)\/[^;,]+)[;,]/i);
+    return normalizeText(m?.[1] || "");
   }
-  try {
-    const parsed = new URL(raw);
-    const host = normalizeText(parsed.hostname).toLowerCase();
-    const pathname = normalizeText(parsed.pathname).toLowerCase();
-    if ((host === "gpi.otd.us.kg" || host.endsWith(".otd.us.kg")) && pathname.startsWith("/images/")) {
-      return "image/jpeg";
-    }
-  } catch {}
   const clean = raw.split("?")[0].split("#")[0].toLowerCase();
   if (clean.endsWith(".png")) return "image/png";
   if (clean.endsWith(".jpg") || clean.endsWith(".jpeg")) return "image/jpeg";
@@ -616,28 +620,33 @@ function guessMediaTypeFromUrl(url) {
   if (clean.endsWith(".svg")) return "image/svg+xml";
   if (clean.endsWith(".bmp")) return "image/bmp";
   if (clean.endsWith(".avif")) return "image/avif";
+  if (clean.endsWith(".mp4")) return "video/mp4";
+  if (clean.endsWith(".webm")) return "video/webm";
+  if (clean.endsWith(".mov")) return "video/quicktime";
+  if (clean.endsWith(".m4v")) return "video/x-m4v";
+  if (clean.endsWith(".ogv")) return "video/ogg";
   return "";
 }
 
 function isProbablyImageMedia(mediaUrl, mediaType = "") {
   const type = normalizeText(mediaType).toLowerCase();
   if (type.startsWith("image/")) return true;
-  return !!guessMediaTypeFromUrl(mediaUrl);
+  return guessMediaTypeFromUrl(mediaUrl).startsWith("image/");
+}
+
+function isProbablyVideoMedia(mediaUrl, mediaType = "") {
+  const type = normalizeText(mediaType).toLowerCase();
+  if (type.startsWith("video/")) return true;
+  return guessMediaTypeFromUrl(mediaUrl).startsWith("video/");
 }
 
 function extractInlineMediaRefs(text) {
   const source = String(text == null ? "" : text);
   const refs = [];
-  const mediaMatches = source.match(/MEDIA\s*:\s*(data:image\/[^\s"')]+|https?:\/\/[^\s"')]+)/gi) || [];
+  const mediaMatches = source.match(/MEDIA\s*:\s*(data:(?:image|video)\/[^\s"')]+|https?:\/\/[^\s"')]+)/gi) || [];
   for (const item of mediaMatches) {
     const ref = normalizeText(item.replace(/^MEDIA\s*:\s*/i, ""));
     if (ref) refs.push(ref);
-  }
-  if (!refs.length) {
-    const urlMatches = source.match(/https?:\/\/[^\s"')]+/gi) || [];
-    for (const item of urlMatches) {
-      if (guessMediaTypeFromUrl(item)) refs.push(normalizeText(item));
-    }
   }
   return [...new Set(refs.filter(Boolean))];
 }
@@ -645,12 +654,9 @@ function extractInlineMediaRefs(text) {
 function stripInlineMediaText(text) {
   const source = String(text == null ? "" : text).trim();
   if (!source) return "";
-  const stripped = source
-    .replace(/MEDIA\s*:\s*(data:image\/[^\s"')]+|https?:\/\/[^\s"')]+)/gi, "")
+  return source
+    .replace(/MEDIA\s*:\s*(data:(?:image|video)\/[^\s"')]+|https?:\/\/[^\s"')]+)/gi, "")
     .trim();
-  if (!stripped) return "";
-  if (/^https?:\/\/[^\s]+$/i.test(stripped) && guessMediaTypeFromUrl(stripped)) return "";
-  return stripped;
 }
 
 function normalizeId(value) {
@@ -695,7 +701,8 @@ function normalizeIncomingMessage(frame) {
     ...normalizeStringArray(frame.media),
   ].filter(Boolean);
   const inlineMediaUrls = extractInlineMediaRefs(rawText);
-  const mediaUrl = frameMediaUrls[0] || inlineMediaUrls[0] || "";
+  const inlineRenderableUrls = inlineMediaUrls.filter((item) => !!guessMediaTypeFromUrl(item));
+  const mediaUrl = frameMediaUrls[0] || inlineRenderableUrls[0] || "";
   const mediaType = normalizeText(frame.mediaType || frame.mime || frame.mediaMime || guessMediaTypeFromUrl(mediaUrl));
   const text = mediaUrl ? stripInlineMediaText(rawText) : rawText;
 

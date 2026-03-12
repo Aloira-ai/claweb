@@ -373,7 +373,8 @@ button {
   margin-top: 10px;
 }
 
-.msg-media img {
+.msg-media img,
+.msg-media video {
   display: block;
   width: 100%;
   max-width: 100%;
@@ -744,7 +745,8 @@ button:disabled {
     padding: 11px 12px;
   }
 
-  .msg-media img {
+  .msg-media img,
+  .msg-media video {
     max-height: 46dvh;
   }
 
