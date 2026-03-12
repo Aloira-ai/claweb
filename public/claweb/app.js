@@ -56,6 +56,7 @@ const state = {
   switchTarget: null,
   messageIndex: new Map(), // messageId -> { text, node }
   assistantName: null,
+  composingReplyTo: null,
 };
 
 const el = {
@@ -78,6 +79,9 @@ const el = {
   searchInput: document.getElementById("search-input"),
   searchClear: document.getElementById("search-clear"),
   searchResults: document.getElementById("search-results"),
+  replyBanner: document.getElementById("reply-banner"),
+  replyBannerText: document.getElementById("reply-banner-text"),
+  replyCancel: document.getElementById("reply-cancel"),
 };
 
 function setStatus(text, cls) {
@@ -135,6 +139,31 @@ function addMessageRich({ role, text, meta = "", messageId = null, replyTo = nul
     metaNode.className = "meta";
     metaNode.textContent = meta;
     node.appendChild(metaNode);
+  }
+
+  if (messageId && role !== "system") {
+    const actions = document.createElement("div");
+    actions.className = "msg-actions";
+
+    const replyBtn = document.createElement("button");
+    replyBtn.type = "button";
+    replyBtn.className = "ghost";
+    replyBtn.textContent = "Reply";
+
+    replyBtn.addEventListener("click", (e) => {
+      e.preventDefault();
+      e.stopPropagation();
+      state.composingReplyTo = messageId;
+      const snippet = String(text || "").slice(0, 140);
+      if (el.replyBannerText) {
+        el.replyBannerText.textContent = `Replying to: ${snippet}`;
+      }
+      el.replyBanner?.classList.remove("hidden");
+      el.input?.focus();
+    });
+
+    actions.appendChild(replyBtn);
+    node.appendChild(actions);
   }
 
   el.messages.appendChild(node);
@@ -615,6 +644,7 @@ function sendCurrentMessage() {
     role: "user",
     text,
     messageId: id,
+    replyTo: state.composingReplyTo,
     ts,
   };
   renderNormalizedMessage(localMessage);
@@ -629,12 +659,17 @@ function sendCurrentMessage() {
     type: "message",
     id,
     text,
+    replyTo: state.composingReplyTo || undefined,
     timestamp: ts,
   };
 
   try {
     state.ws.send(JSON.stringify(frame));
     el.input.value = "";
+    // clear reply mode after send
+    state.composingReplyTo = null;
+    el.replyBanner?.classList.add("hidden");
+    if (el.replyBannerText) el.replyBannerText.textContent = "";
     el.input.focus();
   } catch {
     markPending(metaNode, "failed");
@@ -648,6 +683,10 @@ function logout() {
   state.ready = false;
   state.pendingById.clear();
   state.renderedMessageKeys.clear();
+  state.messageIndex.clear();
+  state.composingReplyTo = null;
+  el.replyBanner?.classList.add("hidden");
+  if (el.replyBannerText) el.replyBannerText.textContent = "";
   el.messages.innerHTML = "";
   setStatus("Offline", "status-offline");
   showLoginPanel();
@@ -774,6 +813,15 @@ el.input.addEventListener("keydown", (event) => {
 });
 el.disconnectBtn.addEventListener("click", closeSocket);
 el.logoutBtn.addEventListener("click", logout);
+
+if (el.replyCancel) {
+  el.replyCancel.addEventListener("click", () => {
+    state.composingReplyTo = null;
+    el.replyBanner?.classList.add("hidden");
+    if (el.replyBannerText) el.replyBannerText.textContent = "";
+    el.input?.focus();
+  });
+}
 
 if (el.searchInput) {
   const onSearch = () => {

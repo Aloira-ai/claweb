@@ -716,6 +716,7 @@ wss.on("connection", (clientWs, req) => {
 
     const id = String(frame.id || "").trim();
     const textMsg = String(frame.text || "").trim();
+    const replyTo = frame.replyTo ? String(frame.replyTo).trim() : "";
     const ts = Number(frame.timestamp) || Date.now();
 
     if (!id) return sendClient({ type: "error", message: "missing id" });
@@ -725,7 +726,13 @@ wss.on("connection", (clientWs, req) => {
       userId: state.session.userId,
       roomId: state.session.roomId,
       clientId: state.session.clientId,
-      message: { role: "user", text: textMsg, ts, messageId: id },
+      message: {
+        role: "user",
+        text: textMsg,
+        ts,
+        messageId: id,
+        replyTo: replyTo || undefined,
+      },
     });
 
     state.inFlight.add(id);
@@ -733,7 +740,15 @@ wss.on("connection", (clientWs, req) => {
     try {
       ensureUpstream();
       if (state.upstream && state.upstream.readyState === WebSocket.OPEN) {
-        state.upstream.send(JSON.stringify({ type: "message", id, text: textMsg, timestamp: ts }));
+        state.upstream.send(
+          JSON.stringify({
+            type: "message",
+            id,
+            text: textMsg,
+            replyTo: replyTo || undefined,
+            timestamp: ts,
+          }),
+        );
       } else {
         sendClient({ type: "error", id, message: "upstream_not_ready" });
       }

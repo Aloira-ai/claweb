@@ -4,7 +4,7 @@
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
   <title>CLAWeb Entry</title>
-  <link rel="stylesheet" href="/claweb/style.css?v=20260312-7" />
+  <link rel="stylesheet" href="/claweb/style.css?v=20260312-8" />
 </head>
 <body>
   <main class="app">
@@ -56,6 +56,10 @@
       <section id="messages" class="messages" aria-live="polite"></section>
 
       <footer class="composer">
+        <div id="reply-banner" class="reply-banner hidden" aria-live="polite">
+          <div class="reply-banner-text" id="reply-banner-text"></div>
+          <button id="reply-cancel" type="button" class="ghost">Cancel</button>
+        </div>
         <textarea id="message-input" rows="2" placeholder="Enter sends, Shift+Enter adds newline"></textarea>
         <button id="send-btn" type="button">Send</button>
       </footer>
@@ -67,6 +71,6 @@
     </section>
   </main>
 
-  <script src="/claweb/app.js?v=20260312-9"></script>
+  <script src="/claweb/app.js?v=20260312-10"></script>
 </body>
 </html>
