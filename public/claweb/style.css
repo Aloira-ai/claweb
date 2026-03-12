@@ -584,6 +584,12 @@ button {
   color: var(--muted);
 }
 
+.appearance-upload-row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
 .modal-actions {
   margin-top: 14px;
   display: flex;

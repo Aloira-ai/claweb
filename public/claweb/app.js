@@ -95,6 +95,8 @@ const el = {
   appearanceCharacter: document.getElementById("appearance-character"),
   appearanceAvatarMode: document.getElementById("appearance-avatar-mode"),
   appearanceAvatar: document.getElementById("appearance-avatar"),
+  appearanceAvatarPick: document.getElementById("appearance-avatar-pick"),
+  appearanceAvatarFile: document.getElementById("appearance-avatar-file"),
   appearancePreviewAvatar: document.getElementById("appearance-preview-avatar"),
   appearancePreviewTitle: document.getElementById("appearance-preview-title"),
   appearancePreviewCharacter: document.getElementById("appearance-preview-character"),
@@ -1691,6 +1693,25 @@ el.appearanceTitle?.addEventListener("input", onAppearanceInput);
 el.appearanceCharacter?.addEventListener("input", onAppearanceInput);
 el.appearanceAvatar?.addEventListener("input", onAppearanceInput);
 el.appearanceAvatarMode?.addEventListener("change", onAppearanceInput);
+el.appearanceAvatarPick?.addEventListener("click", () => el.appearanceAvatarFile?.click());
+el.appearanceAvatarFile?.addEventListener("change", async (e) => {
+  const file = e.target?.files?.[0];
+  if (!file || !String(file.type || "").startsWith("image/")) return;
+  try {
+    const dataUrl = await readFileAsDataURL(file);
+    if (el.appearanceAvatar) el.appearanceAvatar.value = String(dataUrl || "");
+    if (el.appearanceAvatarMode) el.appearanceAvatarMode.value = "image";
+    onAppearanceInput();
+  } catch {
+    addMessage("system", "头像图片读取失败。");
+  } finally {
+    try {
+      if (el.appearanceAvatarFile) el.appearanceAvatarFile.value = "";
+    } catch {
+      // ignore
+    }
+  }
+});
 el.appearanceClose?.addEventListener("click", hideAppearanceModal);
 el.appearanceReset?.addEventListener("click", () => {
   fillAppearanceForm(DEFAULT_UI);
