@@ -750,8 +750,16 @@ function dataUrlByteLength(dataUrl) {
 }
 
 async function compressImageDataUrl(inputDataUrl, opts = {}) {
-  const maxSide = Number(opts.maxSide || 1600);
-  const targetMaxBytes = Number(opts.targetMaxBytes || 1200 * 1024);
+  const sourceMime = String(opts.sourceMime || "").toLowerCase();
+  const sourceName = String(opts.sourceName || "").toLowerCase();
+  const srcBytes = dataUrlByteLength(inputDataUrl);
+
+  const looksLikeScreenshot =
+    sourceMime === "image/png" ||
+    /screenshot|screen shot|snip|截屏|截图|屏幕快照/.test(sourceName);
+
+  const maxSide = Number(opts.maxSide || (looksLikeScreenshot ? 2200 : 1600));
+  const targetMaxBytes = Number(opts.targetMaxBytes || (looksLikeScreenshot ? 2200 * 1024 : 1200 * 1024));
   const preferWebp = opts.preferWebp !== false;
 
   const img = new Image();
@@ -767,6 +775,24 @@ async function compressImageDataUrl(inputDataUrl, opts = {}) {
   const dw = Math.max(1, Math.round(sw * scale));
   const dh = Math.max(1, Math.round(sh * scale));
 
+  // If screenshot-like input is already reasonably small and doesn't need downscale,
+  // keep the original to avoid OCR/text sharpness loss.
+  if (looksLikeScreenshot && scale === 1 && srcBytes != null && srcBytes <= targetMaxBytes) {
+    return {
+      dataUrl: inputDataUrl,
+      mime: sourceMime || "image/png",
+      stats: {
+        srcBytes,
+        outBytes: srcBytes,
+        scaled: false,
+        width: dw,
+        height: dh,
+        quality: null,
+        strategy: "keep-original-screenshot",
+      },
+    };
+  }
+
   const canvas = document.createElement("canvas");
   canvas.width = dw;
   canvas.height = dh;
@@ -774,35 +800,76 @@ async function compressImageDataUrl(inputDataUrl, opts = {}) {
   if (!ctx) throw new Error("no_canvas_ctx");
   ctx.drawImage(img, 0, 0, dw, dh);
 
-  const mime = preferWebp && canUseWebp() ? "image/webp" : "image/jpeg";
+  const candidates = [];
 
-  // Try a small quality ladder until size is reasonable.
-  const qualities = [0.86, 0.82, 0.78, 0.72, 0.65, 0.58];
-  let best = null;
-
-  for (const q of qualities) {
-    const out = canvas.toDataURL(mime, q);
-    const bytes = dataUrlByteLength(out);
-    if (bytes != null && bytes <= targetMaxBytes) {
-      best = { dataUrl: out, mime, quality: q, bytes };
-      break;
-    }
-    // keep the smallest we've seen (in case nothing fits)
-    if (!best || (bytes != null && best.bytes != null && bytes < best.bytes)) {
-      best = { dataUrl: out, mime, quality: q, bytes };
+  // Screenshot-like images: try lossless resize-preserving PNG first.
+  if (looksLikeScreenshot) {
+    try {
+      const pngOut = canvas.toDataURL("image/png");
+      candidates.push({
+        dataUrl: pngOut,
+        mime: "image/png",
+        quality: null,
+        bytes: dataUrlByteLength(pngOut),
+        strategy: "png-resize",
+      });
+    } catch {
+      // ignore
     }
   }
 
+  const lossyMime = preferWebp && canUseWebp() ? "image/webp" : "image/jpeg";
+  const qualities = looksLikeScreenshot ? [0.92, 0.88, 0.84, 0.8] : [0.86, 0.82, 0.78, 0.72, 0.65, 0.58];
+
+  for (const q of qualities) {
+    const out = canvas.toDataURL(lossyMime, q);
+    candidates.push({
+      dataUrl: out,
+      mime: lossyMime,
+      quality: q,
+      bytes: dataUrlByteLength(out),
+      strategy: looksLikeScreenshot ? "lossy-screenshot" : "lossy-photo",
+    });
+  }
+
+  let best = null;
+  for (const c of candidates) {
+    if (!c || c.bytes == null) continue;
+    if (c.bytes <= targetMaxBytes) {
+      best = c;
+      break;
+    }
+    if (!best || c.bytes < best.bytes) best = c;
+  }
+
+  // If the candidate is not materially smaller, keep original.
+  if (!best || (srcBytes != null && best.bytes != null && best.bytes >= srcBytes * 0.96)) {
+    return {
+      dataUrl: inputDataUrl,
+      mime: sourceMime || best?.mime || "image/jpeg",
+      stats: {
+        srcBytes,
+        outBytes: srcBytes,
+        scaled: scale < 1,
+        width: dw,
+        height: dh,
+        quality: null,
+        strategy: looksLikeScreenshot ? "keep-original-screenshot" : "keep-original-photo",
+      },
+    };
+  }
+
   return {
-    dataUrl: best?.dataUrl || inputDataUrl,
-    mime: best?.mime || "image/jpeg",
+    dataUrl: best.dataUrl,
+    mime: best.mime,
     stats: {
-      srcBytes: dataUrlByteLength(inputDataUrl),
-      outBytes: best?.bytes ?? null,
+      srcBytes,
+      outBytes: best.bytes ?? null,
       scaled: scale < 1,
       width: dw,
       height: dh,
-      quality: best?.quality ?? null,
+      quality: best.quality ?? null,
+      strategy: best.strategy,
     },
   };
 }
@@ -829,8 +896,8 @@ function setPendingImage(file, dataUrl) {
   Promise.resolve()
     .then(async () => {
       const res = await compressImageDataUrl(dataUrl, {
-        maxSide: 1600,
-        targetMaxBytes: 1200 * 1024,
+        sourceMime: current.mime,
+        sourceName: current.filename,
         preferWebp: true,
       });
       // If user cleared/replaced the image, abort.
@@ -853,9 +920,11 @@ function setPendingImage(file, dataUrl) {
 
       if (el.imageHint) {
         if (srcKb && outKb && outKb < srcKb) {
-          el.imageHint.textContent = `已压缩：${srcKb}KB→${outKb}KB（发送时会用压缩后的图片）`;
+          const mode = res.stats?.strategy?.includes("screenshot") ? "截图保真压缩" : "照片压缩";
+          el.imageHint.textContent = `已压缩：${srcKb}KB→${outKb}KB（${mode}，发送时会用压缩后的图片）`;
         } else if (srcKb) {
-          el.imageHint.textContent = `无需压缩：约 ${srcKb}KB（直接发送原图）`;
+          const mode = res.stats?.strategy?.includes("screenshot") ? "截图保真" : "原图直发";
+          el.imageHint.textContent = `无需压缩：约 ${srcKb}KB（${mode}）`;
         } else {
           el.imageHint.textContent = "已就绪（发送）";
         }
