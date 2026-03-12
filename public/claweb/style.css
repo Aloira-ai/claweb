@@ -494,6 +494,16 @@ button:disabled {
 }
 
 @media (max-width: 720px) {
+  .app {
+    padding: 10px;
+    align-items: stretch;
+  }
+
+  .panel {
+    padding: 12px;
+    border-radius: 10px;
+  }
+
   .topbar {
     align-items: flex-start;
     flex-direction: column;
@@ -501,13 +511,96 @@ button:disabled {
 
   .topbar-actions {
     width: 100%;
-    justify-content: flex-start;
+    display: grid;
+    grid-template-columns: 1fr auto auto;
+    align-items: center;
+    gap: 8px;
   }
 
   .search {
+    grid-column: 1 / -1;
     flex: 1 1 100%;
     width: 100%;
     min-width: 0;
+  }
+
+  .search-results {
+    max-height: 34dvh;
+    padding: 8px;
+  }
+
+  .search-hit {
+    padding: 9px 10px;
+  }
+
+  .messages {
+    min-height: 240px;
+    max-height: 52dvh;
+    padding: 12px;
+  }
+
+  .msg {
+    max-width: 92%;
+  }
+
+  .reply-banner,
+  .image-banner {
+    padding: 8px;
+  }
+
+  .reply-banner {
+    align-items: flex-start;
+    flex-direction: column;
+  }
+
+  .reply-banner button {
+    align-self: flex-end;
+  }
+
+  .image-banner {
+    grid-template-columns: 48px 1fr;
+    grid-template-areas:
+      "preview meta"
+      "remove remove";
+    align-items: start;
+  }
+
+  .image-preview {
+    grid-area: preview;
+    width: 48px;
+    height: 48px;
+  }
+
+  .image-banner-meta {
+    grid-area: meta;
+    min-width: 0;
+  }
+
+  .image-name,
+  .image-hint,
+  .reply-banner-text {
+    overflow-wrap: anywhere;
+    word-break: break-word;
+    white-space: normal;
+  }
+
+  #image-cancel {
+    grid-area: remove;
+    width: 100%;
+  }
+
+  #message-input {
+    min-height: 88px;
+  }
+
+  .composer-actions {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 8px;
+  }
+
+  .composer-actions button {
+    width: 100%;
   }
 
   .actions.secondary {
@@ -516,5 +609,30 @@ button:disabled {
 
   .actions.secondary button {
     flex: 1;
+  }
+}
+
+@media (max-width: 420px) {
+  .topbar-actions {
+    grid-template-columns: 1fr 1fr;
+  }
+
+  .search {
+    grid-column: 1 / -1;
+  }
+
+  #threads-btn,
+  #search-clear,
+  #conn-status {
+    width: 100%;
+    text-align: center;
+  }
+
+  .messages {
+    max-height: 50dvh;
+  }
+
+  .msg {
+    max-width: 96%;
   }
 }
