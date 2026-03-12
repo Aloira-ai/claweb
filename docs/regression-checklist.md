@@ -20,26 +20,41 @@ This checklist is intended to be run on the public, browser-facing test site bef
 - [ ] Assistant reply arrives
 - [ ] User/assistant roles are not swapped
 
-### 3) Dedupe / echo correctness
+### 3) Protocol linking (turnId / messageId / replyTo)
+- [ ] After sending a message, verify the assistant message is **linked** to the user turn:
+  - Open DevTools → Console
+  - Confirm incoming assistant frames include `replyTo` (or `parentId`) pointing to the user turn id
+  - Confirm assistant `id/messageId` is **not equal** to the user turn id (no id collision)
+
+### 4) Dedupe / echo correctness
 - [ ] A user message is rendered exactly once (no duplicate user-echo)
 - [ ] Assistant message is rendered exactly once (no duplicate replay)
 
-### 4) History replay ordering
+### 5) History replay ordering (ts + _idx)
 - [ ] Send 3 quick messages: `1`, `2`, `3`
 - [ ] Refresh the page
-- [ ] History order remains `1 → 2 → 3` (stable ordering by `ts` + tie-break)
+- [ ] History order remains `1 → 2 → 3` (stable ordering by `ts` + `_idx` tie-break)
 
-### 5) WebSocket stability
+### 6) Recent snapshot behavior (cache, must not break correctness)
+- [ ] Send one message, then refresh
+- [ ] History loads quickly and still shows correct order/dedupe
+- [ ] If snapshot is missing/corrupt: system should fall back to raw history (no "empty history" surprise)
+
+### 7) WebSocket stability
 - [ ] Refresh while connected → reconnects cleanly
 - [ ] No stuck “connecting…” state
 
 ## P1 (Strongly Recommended)
 
-### 6) Detached reply persistence
+### 8) Detached reply persistence
 - [ ] Send a message that takes time
 - [ ] Immediately refresh/close the tab
 - [ ] Reopen after 10–30s
 - [ ] Assistant reply is persisted and appears in history
+
+### 9) Error surface (auth & upstream)
+- [ ] (Optional) Temporarily break auth (wrong passphrase) → UI shows auth error, does not hang
+- [ ] (Optional) If upstream WS is down → UI shows a clear error, pending is marked failed
 
 ## Notes
 - If any P0 item fails: stop feature work, fix regression first.
