@@ -1,6 +1,9 @@
+// Canonical endpoints are short-path: /login /history /ws
+// Compat endpoints (optional): /claweb/login /claweb/history /claweb/ws
+
 function defaultWsUrl() {
   const proto = window.location.protocol === "https:" ? "wss:" : "ws:";
-  return `${proto}//${window.location.host}/claweb/ws`;
+  return `${proto}//${window.location.host}/ws`;
 }
 
 function safeRandomId(prefix = "msg") {
@@ -8,6 +11,39 @@ function safeRandomId(prefix = "msg") {
     return `${prefix}-${window.crypto.randomUUID()}`;
   }
   return `${prefix}-${Date.now()}-${Math.random().toString(16).slice(2, 10)}`;
+}
+
+function nextMessageId(clientId) {
+  const cid = String(clientId || "").trim() || "client";
+  const ts = Date.now();
+
+  // Prefer a monotonic, per-client id to make dedupe stable across refresh.
+  try {
+    const key = `claweb:counter:${cid}`;
+    const prev = Number(window.localStorage.getItem(key) || "0");
+    const next = Number.isFinite(prev) ? prev + 1 : 1;
+    window.localStorage.setItem(key, String(next));
+    return `${cid}:${next}:${ts}`;
+  } catch {
+    return safeRandomId(`msg-${cid}`);
+  }
+}
+
+async function fetchJsonWithFallback(primaryUrl, fallbackUrl, options) {
+  const resp1 = await fetch(primaryUrl, options);
+  if (resp1.status !== 404) {
+    return { resp: resp1, data: await tryReadJson(resp1) };
+  }
+  const resp2 = await fetch(fallbackUrl, options);
+  return { resp: resp2, data: await tryReadJson(resp2) };
+}
+
+async function tryReadJson(resp) {
+  try {
+    return await resp.json();
+  } catch {
+    return null;
+  }
 }
 
 const state = {
@@ -211,18 +247,13 @@ async function loadRecentHistory() {
       clientId: String(state.session.clientId || ""),
       limit: "60",
     });
-    const resp = await fetch(`/claweb/history?${query.toString()}`, {
+    const url1 = `/history?${query.toString()}`;
+    const url2 = `/claweb/history?${query.toString()}`;
+    const { resp, data } = await fetchJsonWithFallback(url1, url2, {
       headers: {
         "x-claweb-token": String(state.session.token || ""),
       },
     });
-
-    let data = null;
-    try {
-      data = await resp.json();
-    } catch {
-      // ignore invalid json
-    }
 
     if (!resp.ok || !data?.ok || !Array.isArray(data.messages)) {
       addMessage("system", "Failed to load history. Starting from new messages.");
@@ -262,18 +293,11 @@ async function login() {
   el.loginBtn.disabled = true;
 
   try {
-    const resp = await fetch("/claweb/login", {
+    const { resp, data } = await fetchJsonWithFallback("/login", "/claweb/login", {
       method: "POST",
       headers: { "content-type": "application/json" },
       body: JSON.stringify({ passphrase }),
     });
-
-    let data = null;
-    try {
-      data = await resp.json();
-    } catch {
-      // ignore invalid json
-    }
 
     if (!resp.ok || !data?.ok || !data?.session) {
       setLoginError(mapLoginError(data?.error));
@@ -411,8 +435,8 @@ function sendCurrentMessage() {
     return;
   }
 
-  const id = safeRandomId("msg");
   const ts = Date.now();
+  const id = nextMessageId(state.session && state.session.clientId);
   const localMessage = {
     role: "user",
     text,

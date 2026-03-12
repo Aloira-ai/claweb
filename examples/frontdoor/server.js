@@ -1,0 +1,514 @@
+// Minimal CLAWeb frontdoor example (canonical routes: /login /history /ws)
+// - serves static UI
+// - login via fixed passphrase mapping
+// - persists raw history (JSONL) with stable _idx tie-break
+// - proxies WS frames to OpenClaw claweb upstream (typically ws://127.0.0.1:18999)
+
+import http from "node:http";
+import path from "node:path";
+import fs from "node:fs";
+import fsp from "node:fs/promises";
+import { randomUUID } from "node:crypto";
+import { fileURLToPath } from "node:url";
+import { WebSocketServer, WebSocket } from "ws";
+
+const __filename = fileURLToPath(import.meta.url);
+const __dirname = path.dirname(__filename);
+
+const ENV = process.env;
+
+const BIND = (ENV.BIND || "127.0.0.1").trim();
+const PORT = Number(ENV.PORT || 18081);
+
+const STATIC_ROOT = path.resolve(
+  __dirname,
+  (ENV.CLAWEB_STATIC_ROOT || "../../public/claweb").trim(),
+);
+
+const LOGIN_CONFIG_PATH = path.resolve(
+  __dirname,
+  (ENV.CLAWEB_LOGIN_CONFIG || "./config/claweb-login.example.json").trim(),
+);
+
+const HISTORY_DIR = path.resolve(
+  __dirname,
+  (ENV.CLAWEB_HISTORY_DIR || "./data/history").trim(),
+);
+
+const UPSTREAM_WS = (ENV.CLAWEB_UPSTREAM_WS || "ws://127.0.0.1:18999").trim();
+const UPSTREAM_TOKEN = (
+  ENV.CLAWEB_UPSTREAM_TOKEN ||
+  (ENV.CLAWEB_UPSTREAM_TOKEN_FILE
+    ? fs.readFileSync(ENV.CLAWEB_UPSTREAM_TOKEN_FILE, "utf8")
+    : "")
+).trim();
+
+if (!UPSTREAM_TOKEN) {
+  console.warn(
+    "[frontdoor] WARNING: missing CLAWEB_UPSTREAM_TOKEN (or *_TOKEN_FILE). WS proxy will auth-fail until configured.",
+  );
+}
+
+await fsp.mkdir(HISTORY_DIR, { recursive: true });
+
+function json(res, status, obj) {
+  const body = Buffer.from(JSON.stringify(obj));
+  res.writeHead(status, {
+    "content-type": "application/json; charset=utf-8",
+    "content-length": String(body.length),
+  });
+  res.end(body);
+}
+
+function text(res, status, body, headers = {}) {
+  const buf = Buffer.from(String(body));
+  res.writeHead(status, {
+    "content-type": "text/plain; charset=utf-8",
+    "content-length": String(buf.length),
+    ...headers,
+  });
+  res.end(buf);
+}
+
+function notFound(res) {
+  text(res, 404, "not_found");
+}
+
+async function readJsonBody(req) {
+  const chunks = [];
+  for await (const chunk of req) chunks.push(chunk);
+  const raw = Buffer.concat(chunks).toString("utf8");
+  try {
+    return JSON.parse(raw);
+  } catch {
+    return null;
+  }
+}
+
+function safeFileSegment(s) {
+  return String(s || "")
+    .trim()
+    .replace(/[^a-zA-Z0-9._-]+/g, "_")
+    .slice(0, 128);
+}
+
+function historyKey({ userId, roomId, clientId }) {
+  return [safeFileSegment(userId), safeFileSegment(roomId || "direct"), safeFileSegment(clientId)].join("__");
+}
+
+// --- login mapping ---
+
+let loginConfigCache = null;
+let loginConfigMtime = 0;
+
+async function loadLoginConfig() {
+  const stat = await fsp.stat(LOGIN_CONFIG_PATH);
+  if (loginConfigCache && stat.mtimeMs === loginConfigMtime) return loginConfigCache;
+  const raw = await fsp.readFile(LOGIN_CONFIG_PATH, "utf8");
+  const parsed = JSON.parse(raw);
+  loginConfigCache = parsed;
+  loginConfigMtime = stat.mtimeMs;
+  return parsed;
+}
+
+function findSessionByPassphrase(cfg, passphrase) {
+  const matches = [];
+  for (const [identity, entry] of Object.entries(cfg || {})) {
+    if (!entry || typeof entry !== "object") continue;
+    const passphrases = Array.isArray(entry.passphrases) ? entry.passphrases : [];
+    if (passphrases.map(String).map((s) => s.trim()).includes(passphrase)) {
+      matches.push([identity, entry]);
+    }
+  }
+  return matches;
+}
+
+// token -> session
+const sessionsByToken = new Map();
+
+function buildSession({ identity, entry }) {
+  const token = `tok_${randomUUID()}`;
+  const session = {
+    identity,
+    displayName: String(entry.displayName || identity),
+    token,
+    userId: String(entry.userId || `user-${identity}`),
+    roomId: String(entry.roomId || ""),
+    clientId: String(entry.clientId || identity),
+    wsUrl: "/ws",
+  };
+  sessionsByToken.set(token, session);
+  return session;
+}
+
+function requireSession(req) {
+  const token = String(req.headers["x-claweb-token"] || "").trim();
+  if (!token) return null;
+  return sessionsByToken.get(token) || null;
+}
+
+// --- raw history ---
+
+const idxByFile = new Map();
+
+async function initIdxForFile(filePath) {
+  if (idxByFile.has(filePath)) return;
+  try {
+    const raw = await fsp.readFile(filePath, "utf8");
+    const lines = raw.split("\n").filter(Boolean);
+    idxByFile.set(filePath, lines.length);
+  } catch {
+    idxByFile.set(filePath, 0);
+  }
+}
+
+async function appendRawMessage({ userId, roomId, clientId, message }) {
+  const key = historyKey({ userId, roomId, clientId });
+  const filePath = path.join(HISTORY_DIR, `${key}.jsonl`);
+  await initIdxForFile(filePath);
+
+  const nextIdx = (idxByFile.get(filePath) || 0) + 1;
+  idxByFile.set(filePath, nextIdx);
+
+  const record = {
+    role: message.role,
+    text: message.text,
+    ts: message.ts,
+    messageId: message.messageId,
+    _idx: nextIdx,
+  };
+
+  await fsp.appendFile(filePath, JSON.stringify(record) + "\n", "utf8");
+}
+
+async function loadRawHistory({ userId, roomId, clientId, limit }) {
+  const key = historyKey({ userId, roomId, clientId });
+  const filePath = path.join(HISTORY_DIR, `${key}.jsonl`);
+
+  let raw;
+  try {
+    raw = await fsp.readFile(filePath, "utf8");
+  } catch {
+    return [];
+  }
+
+  const lines = raw.split("\n").filter(Boolean);
+  const messages = [];
+  for (const line of lines) {
+    try {
+      const m = JSON.parse(line);
+      if (!m || typeof m !== "object") continue;
+      messages.push(m);
+    } catch {
+      // ignore
+    }
+  }
+
+  messages.sort((a, b) => {
+    const ta = Number(a.ts || 0);
+    const tb = Number(b.ts || 0);
+    if (ta !== tb) return ta - tb;
+    return Number(a._idx || 0) - Number(b._idx || 0);
+  });
+
+  const n = Math.max(0, Math.min(1000, Number(limit || 60) || 60));
+  return n ? messages.slice(-n) : messages;
+}
+
+// --- static serving ---
+
+function contentTypeFor(filePath) {
+  const ext = path.extname(filePath).toLowerCase();
+  if (ext === ".html") return "text/html; charset=utf-8";
+  if (ext === ".css") return "text/css; charset=utf-8";
+  if (ext === ".js") return "application/javascript; charset=utf-8";
+  if (ext === ".json") return "application/json; charset=utf-8";
+  if (ext === ".png") return "image/png";
+  if (ext === ".jpg" || ext === ".jpeg") return "image/jpeg";
+  if (ext === ".webp") return "image/webp";
+  if (ext === ".svg") return "image/svg+xml";
+  return "application/octet-stream";
+}
+
+async function serveStatic(req, res) {
+  const url = new URL(req.url || "/", `http://${req.headers.host || "localhost"}`);
+  let pathname = decodeURIComponent(url.pathname);
+
+  if (pathname === "/") {
+    res.writeHead(302, { Location: "/index.html" });
+    res.end();
+    return;
+  }
+
+  // prevent path traversal
+  pathname = pathname.replace(/\0/g, "");
+  const filePath = path.join(STATIC_ROOT, pathname);
+  const resolved = path.resolve(filePath);
+  if (!resolved.startsWith(STATIC_ROOT)) {
+    notFound(res);
+    return;
+  }
+
+  try {
+    const stat = await fsp.stat(resolved);
+    if (!stat.isFile()) {
+      notFound(res);
+      return;
+    }
+    const data = await fsp.readFile(resolved);
+    res.writeHead(200, {
+      "content-type": contentTypeFor(resolved),
+      "content-length": String(data.length),
+      "cache-control": "public, max-age=0",
+    });
+    res.end(data);
+  } catch {
+    notFound(res);
+  }
+}
+
+// --- HTTP server ---
+
+const server = http.createServer(async (req, res) => {
+  const url = new URL(req.url || "/", `http://${req.headers.host || "localhost"}`);
+
+  // canonical routes
+  if (req.method === "POST" && url.pathname === "/login") {
+    const body = await readJsonBody(req);
+    const passphrase = String(body?.passphrase || "").trim();
+    if (!passphrase) return json(res, 400, { ok: false, error: "missing_passphrase" });
+
+    let cfg;
+    try {
+      cfg = await loadLoginConfig();
+    } catch {
+      return json(res, 500, { ok: false, error: "login_not_configured" });
+    }
+
+    const matches = findSessionByPassphrase(cfg, passphrase);
+    if (matches.length === 0) return json(res, 401, { ok: false, error: "invalid_credentials" });
+    if (matches.length > 1) return json(res, 500, { ok: false, error: "ambiguous_passphrase" });
+
+    const [identity, entry] = matches[0];
+    const session = buildSession({ identity, entry });
+    return json(res, 200, { ok: true, session });
+  }
+
+  if (req.method === "GET" && url.pathname === "/history") {
+    const session = requireSession(req);
+    if (!session) return json(res, 401, { ok: false, error: "unauthorized" });
+
+    const userId = String(url.searchParams.get("userId") || session.userId || "");
+    const roomId = String(url.searchParams.get("roomId") || session.roomId || "");
+    const clientId = String(url.searchParams.get("clientId") || session.clientId || "");
+    const limit = Number(url.searchParams.get("limit") || 60);
+
+    const messages = await loadRawHistory({ userId, roomId, clientId, limit });
+    return json(res, 200, { ok: true, messages });
+  }
+
+  // compat aliases
+  if (url.pathname.startsWith("/claweb/")) {
+    // strip prefix and re-dispatch
+    const nextPath = url.pathname.replace(/^\/claweb\b/, "");
+    req.url = nextPath + (url.search || "");
+    return server.emit("request", req, res);
+  }
+
+  // static
+  return serveStatic(req, res);
+});
+
+// --- WS server (browser-facing) ---
+
+const wss = new WebSocketServer({ server, path: "/ws" });
+
+wss.on("connection", (clientWs, req) => {
+  const state = {
+    authed: false,
+    session: null,
+    upstream: null,
+    clientConnected: true,
+    inFlight: new Set(),
+    closeTimer: null,
+  };
+
+  function sendClient(frame) {
+    if (!state.clientConnected) return;
+    try {
+      clientWs.send(JSON.stringify(frame));
+    } catch {
+      // ignore
+    }
+  }
+
+  function scheduleCloseIfIdle() {
+    if (state.closeTimer) clearTimeout(state.closeTimer);
+    if (state.clientConnected) return;
+    state.closeTimer = setTimeout(() => {
+      if (state.inFlight.size === 0 && state.upstream) {
+        try {
+          state.upstream.close();
+        } catch {}
+        state.upstream = null;
+      }
+    }, 60_000);
+  }
+
+  function ensureUpstream() {
+    if (state.upstream && state.upstream.readyState === WebSocket.OPEN) return;
+
+    const upstream = new WebSocket(UPSTREAM_WS);
+    state.upstream = upstream;
+
+    upstream.on("open", () => {
+      const hello = {
+        type: "hello",
+        token: UPSTREAM_TOKEN,
+        clientId: state.session.clientId,
+        userId: state.session.userId,
+        roomId: state.session.roomId || undefined,
+      };
+      upstream.send(JSON.stringify(hello));
+    });
+
+    upstream.on("message", async (chunk) => {
+      let frame;
+      try {
+        frame = JSON.parse(String(chunk));
+      } catch {
+        return;
+      }
+
+      if (frame.type === "ready") {
+        // Mirror readiness to client
+        sendClient(frame);
+        return;
+      }
+
+      if (frame.type === "error") {
+        sendClient(frame);
+        return;
+      }
+
+      if (frame.type === "message") {
+        // Persist assistant message (detached-safe)
+        const messageId = String(frame.id || "").trim() || null;
+        const text = String(frame.text || "").trim();
+        if (messageId && state.inFlight.has(messageId)) {
+          state.inFlight.delete(messageId);
+        }
+
+        if (text) {
+          await appendRawMessage({
+            userId: state.session.userId,
+            roomId: state.session.roomId,
+            clientId: state.session.clientId,
+            message: {
+              role: "assistant",
+              text,
+              ts: Date.now(),
+              messageId: messageId || `asst_${randomUUID()}`,
+            },
+          });
+        }
+
+        // Best-effort forward to client
+        sendClient(frame);
+        scheduleCloseIfIdle();
+        return;
+      }
+    });
+
+    upstream.on("close", () => {
+      // best-effort notify
+      sendClient({ type: "error", message: "upstream_closed" });
+      scheduleCloseIfIdle();
+    });
+
+    upstream.on("error", () => {
+      sendClient({ type: "error", message: "upstream_error" });
+      scheduleCloseIfIdle();
+    });
+  }
+
+  clientWs.on("message", async (chunk) => {
+    let frame;
+    try {
+      frame = JSON.parse(String(chunk));
+    } catch {
+      sendClient({ type: "error", message: "invalid_json" });
+      return;
+    }
+
+    // First frame: hello
+    if (!state.authed) {
+      if (!frame || frame.type !== "hello") {
+        sendClient({ type: "error", message: "first frame must be hello" });
+        clientWs.close(1008, "hello required");
+        return;
+      }
+
+      const token = String(frame.token || "").trim();
+      const session = sessionsByToken.get(token) || null;
+      if (!session) {
+        sendClient({ type: "error", message: "auth failed" });
+        clientWs.close(1008, "unauthorized");
+        return;
+      }
+
+      state.authed = true;
+      state.session = session;
+      ensureUpstream();
+      // Wait for upstream ready to mirror. (If upstream is slow, client will see connecting.)
+      return;
+    }
+
+    if (!frame || frame.type !== "message") {
+      sendClient({ type: "error", message: "unsupported frame" });
+      return;
+    }
+
+    const id = String(frame.id || "").trim();
+    const text = String(frame.text || "").trim();
+    const ts = Number(frame.timestamp) || Date.now();
+
+    if (!id) return sendClient({ type: "error", message: "missing id" });
+    if (!text) return sendClient({ type: "error", id, message: "text is empty" });
+
+    // Persist user message immediately
+    await appendRawMessage({
+      userId: state.session.userId,
+      roomId: state.session.roomId,
+      clientId: state.session.clientId,
+      message: { role: "user", text, ts, messageId: id },
+    });
+
+    state.inFlight.add(id);
+
+    // Proxy to upstream
+    try {
+      ensureUpstream();
+      if (state.upstream && state.upstream.readyState === WebSocket.OPEN) {
+        state.upstream.send(JSON.stringify({ type: "message", id, text, timestamp: ts }));
+      } else {
+        sendClient({ type: "error", id, message: "upstream_not_ready" });
+      }
+    } catch (e) {
+      sendClient({ type: "error", id, message: `proxy_failed: ${String(e)}` });
+    }
+  });
+
+  clientWs.on("close", () => {
+    state.clientConnected = false;
+    scheduleCloseIfIdle();
+  });
+});
+
+server.listen(PORT, BIND, () => {
+  console.log(`[frontdoor] listening on http://${BIND}:${PORT}`);
+  console.log(`[frontdoor] static root: ${STATIC_ROOT}`);
+  console.log(`[frontdoor] login config: ${LOGIN_CONFIG_PATH}`);
+  console.log(`[frontdoor] history dir: ${HISTORY_DIR}`);
+  console.log(`[frontdoor] upstream ws: ${UPSTREAM_WS}`);
+});

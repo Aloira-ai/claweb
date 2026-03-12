@@ -2,13 +2,31 @@
 
 `public/claweb/` is a browser example UI. It requires a host service that exposes three routes.
 
+This project prefers **root-path hosting** (open `/` to get the UI) with **short-path endpoints** (`/login`, `/history`, `/ws`).
+
 ## Required Routes
+
+### Canonical (recommended)
+
+These are the preferred, short-path endpoints. They work well when you serve the CLAWeb UI at the site root (`/`).
+
+1. `POST /login`
+2. `GET /history`
+3. `WS /ws`
+
+### Compatibility (optional)
+
+For hosts that prefer a path prefix (or for migration), you may expose the legacy-prefixed endpoints as aliases:
 
 1. `POST /claweb/login`
 2. `GET /claweb/history`
 3. `WS /claweb/ws`
 
-## `POST /claweb/login`
+## `POST /login` (canonical)
+
+This section describes the canonical `/login` route. If you expose `/claweb/login` as a compatibility alias, it should behave identically.
+
+## `POST /claweb/login` (compat)
 
 Request:
 
@@ -24,7 +42,7 @@ Success response:
   "session": {
     "identity": "guest-a",
     "displayName": "Guest A",
-    "wsUrl": "/claweb/ws",
+    "wsUrl": "/ws",
     "token": "...",
     "userId": "user-guest-a",
     "roomId": "room-main",
@@ -32,6 +50,8 @@ Success response:
   }
 }
 ```
+
+If you expose the compat route set, `wsUrl` MAY also be returned as `"/claweb/ws"`.
 
 Error response:
 
@@ -41,7 +61,11 @@ Error response:
 
 Recommended error codes: `missing_passphrase`, `invalid_credentials`, `ambiguous_passphrase`, `too_many_attempts`, `login_not_configured`.
 
-## `GET /claweb/history`
+## `GET /history` (canonical)
+
+This section describes the canonical `/history` route. If you expose `/claweb/history` as a compatibility alias, it should behave identically.
+
+## `GET /claweb/history` (compat)
 
 Query params:
 
@@ -52,7 +76,7 @@ Query params:
 
 Headers:
 
-- `x-claweb-token: <token>`
+- `x-claweb-token: <token>` (same header for both canonical + compat routes)
 
 Response:
 

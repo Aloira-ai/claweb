@@ -1,0 +1,9 @@
+{
+  "guest-a": {
+    "displayName": "Guest A",
+    "passphrases": ["change-me"],
+    "userId": "user-guest-a",
+    "roomId": "",
+    "clientId": "guest-a"
+  }
+}

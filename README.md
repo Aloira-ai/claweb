@@ -9,6 +9,7 @@ OpenClaw Web Channel plugin plus a browser frontend example.
 - WebSocket channel plugin runtime for OpenClaw.
 - Public browser frontend example in `public/claweb/`.
 - Example configs in `examples/` for OpenClaw and fixed identity mapping.
+- An optional "frontdoor" example host in `examples/frontdoor/` (serves UI + implements /login /history /ws and proxies to upstream claweb channel).
 
 ## MVP Boundary
 
@@ -46,6 +47,12 @@ Out of scope in this repo:
    - `WS /claweb/ws`
 
 Frontend integration contract is documented in [`docs/frontend-integration.md`](./docs/frontend-integration.md).
+
+Project scope and boundaries: [`docs/project-scope.md`](./docs/project-scope.md).
+
+Pre/post change regression checklist (test site): [`docs/regression-checklist.md`](./docs/regression-checklist.md).
+
+State model (raw/recent/runtime): [`docs/state-model.md`](./docs/state-model.md).
 
 ## Public Release Position
 

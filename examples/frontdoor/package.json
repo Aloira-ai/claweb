@@ -1,0 +1,9 @@
+{
+  "name": "claweb-frontdoor-example",
+  "private": true,
+  "type": "module",
+  "description": "Example CLAWeb frontdoor: serves UI, implements /login /history /ws, proxies to OpenClaw claweb channel.",
+  "dependencies": {
+    "ws": "^8.19.0"
+  }
+}
