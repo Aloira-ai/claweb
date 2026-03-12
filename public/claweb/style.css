@@ -81,6 +81,8 @@ body {
   padding: 10px;
   max-height: 180px;
   overflow: auto;
+  width: 100%;
+  max-width: 100%;
 }
 
 .search-hit {
@@ -88,6 +90,8 @@ body {
   padding: 8px 10px;
   cursor: pointer;
   border: 1px solid transparent;
+  max-width: 100%;
+  overflow: hidden;
 }
 
 .search-hit:hover {
@@ -103,9 +107,9 @@ body {
 .search-hit-snippet {
   margin-top: 4px;
   font-size: 13px;
-  white-space: nowrap;
-  overflow: hidden;
-  text-overflow: ellipsis;
+  white-space: normal;
+  overflow-wrap: anywhere;
+  word-break: break-word;
 }
 
 .modal {
