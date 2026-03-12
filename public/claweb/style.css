@@ -299,6 +299,7 @@ button:disabled {
 .messages {
   margin-top: 12px;
   overflow: auto;
+  overflow-x: hidden;
   border: 1px solid var(--line);
   background: #fff;
   border-radius: 12px;
@@ -317,11 +318,12 @@ button:disabled {
   line-height: 1.5;
   white-space: pre-wrap;
   word-break: break-word;
-  overflow: hidden;
+  overflow-wrap: anywhere;
 }
 
 .msg-body {
   white-space: pre-wrap;
+  line-height: 1.5;
 }
 
 .msg-media {
