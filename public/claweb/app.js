@@ -82,6 +82,9 @@ const el = {
   replyBanner: document.getElementById("reply-banner"),
   replyBannerText: document.getElementById("reply-banner-text"),
   replyCancel: document.getElementById("reply-cancel"),
+  msgMenu: document.getElementById("msg-menu"),
+  msgMenuReply: document.getElementById("msg-menu-reply"),
+  msgMenuCopy: document.getElementById("msg-menu-copy"),
 };
 
 function setStatus(text, cls) {
@@ -97,11 +100,81 @@ function addMessage(role, text, meta = "") {
   return addMessageRich({ role, text, meta });
 }
 
+function hideMsgMenu() {
+  if (!el.msgMenu) return;
+  el.msgMenu.classList.add("hidden");
+  el.msgMenu.setAttribute("aria-hidden", "true");
+  el.msgMenu.style.left = "";
+  el.msgMenu.style.top = "";
+  el.msgMenu.dataset.messageId = "";
+  el.msgMenu.dataset.messageText = "";
+}
+
+function showMsgMenu({ x, y, messageId, messageText }) {
+  if (!el.msgMenu) return;
+  const mx = Math.max(8, Math.min(window.innerWidth - 160, x));
+  const my = Math.max(8, Math.min(window.innerHeight - 120, y));
+
+  el.msgMenu.style.left = `${mx}px`;
+  el.msgMenu.style.top = `${my}px`;
+  el.msgMenu.dataset.messageId = String(messageId || "");
+  el.msgMenu.dataset.messageText = String(messageText || "");
+  el.msgMenu.classList.remove("hidden");
+  el.msgMenu.setAttribute("aria-hidden", "false");
+}
+
 function addMessageRich({ role, text, meta = "", messageId = null, replyTo = null }) {
   const node = document.createElement("div");
   node.className = `msg msg-${role}`;
 
   if (messageId) node.dataset.messageId = messageId;
+
+  // Right-click / long-press menu (Reply/Copy)
+  if (messageId && role !== "system") {
+    node.addEventListener("contextmenu", (e) => {
+      e.preventDefault();
+      e.stopPropagation();
+      showMsgMenu({ x: e.clientX, y: e.clientY, messageId, messageText: text });
+    });
+
+    let longPressTimer = null;
+    let touchStartX = 0;
+    let touchStartY = 0;
+
+    node.addEventListener(
+      "touchstart",
+      (e) => {
+        if (!e.touches || e.touches.length !== 1) return;
+        const t = e.touches[0];
+        touchStartX = t.clientX;
+        touchStartY = t.clientY;
+        longPressTimer = window.setTimeout(() => {
+          showMsgMenu({ x: touchStartX, y: touchStartY, messageId, messageText: text });
+        }, 550);
+      },
+      { passive: true },
+    );
+
+    const cancelLongPress = () => {
+      if (longPressTimer) window.clearTimeout(longPressTimer);
+      longPressTimer = null;
+    };
+
+    node.addEventListener("touchend", cancelLongPress, { passive: true });
+    node.addEventListener("touchcancel", cancelLongPress, { passive: true });
+    node.addEventListener(
+      "touchmove",
+      (e) => {
+        if (!longPressTimer) return;
+        if (!e.touches || e.touches.length !== 1) return;
+        const t = e.touches[0];
+        const dx = Math.abs(t.clientX - touchStartX);
+        const dy = Math.abs(t.clientY - touchStartY);
+        if (dx > 12 || dy > 12) cancelLongPress();
+      },
+      { passive: true },
+    );
+  }
 
   const normalizedReplyTo = normalizeId(replyTo);
   if (normalizedReplyTo) {
@@ -139,31 +212,6 @@ function addMessageRich({ role, text, meta = "", messageId = null, replyTo = nul
     metaNode.className = "meta";
     metaNode.textContent = meta;
     node.appendChild(metaNode);
-  }
-
-  if (messageId && role !== "system") {
-    const actions = document.createElement("div");
-    actions.className = "msg-actions";
-
-    const replyBtn = document.createElement("button");
-    replyBtn.type = "button";
-    replyBtn.className = "ghost";
-    replyBtn.textContent = "Reply";
-
-    replyBtn.addEventListener("click", (e) => {
-      e.preventDefault();
-      e.stopPropagation();
-      state.composingReplyTo = messageId;
-      const snippet = String(text || "").slice(0, 140);
-      if (el.replyBannerText) {
-        el.replyBannerText.textContent = `Replying to: ${snippet}`;
-      }
-      el.replyBanner?.classList.remove("hidden");
-      el.input?.focus();
-    });
-
-    actions.appendChild(replyBtn);
-    node.appendChild(actions);
   }
 
   el.messages.appendChild(node);
@@ -822,6 +870,68 @@ if (el.replyCancel) {
     el.input?.focus();
   });
 }
+
+// message menu actions
+if (el.msgMenuReply) {
+  el.msgMenuReply.addEventListener("click", () => {
+    const messageId = String(el.msgMenu?.dataset?.messageId || "").trim();
+    const messageText = String(el.msgMenu?.dataset?.messageText || "");
+    if (!messageId) return;
+    state.composingReplyTo = messageId;
+    const snippet = messageText.slice(0, 140);
+    if (el.replyBannerText) el.replyBannerText.textContent = `Replying to: ${snippet}`;
+    el.replyBanner?.classList.remove("hidden");
+    hideMsgMenu();
+    el.input?.focus();
+  });
+}
+
+if (el.msgMenuCopy) {
+  el.msgMenuCopy.addEventListener("click", async () => {
+    const messageText = String(el.msgMenu?.dataset?.messageText || "");
+    hideMsgMenu();
+    try {
+      await navigator.clipboard.writeText(messageText);
+      addMessage("system", "Copied.");
+    } catch {
+      // best-effort fallback
+      try {
+        const ta = document.createElement("textarea");
+        ta.value = messageText;
+        ta.style.position = "fixed";
+        ta.style.left = "-9999px";
+        document.body.appendChild(ta);
+        ta.select();
+        document.execCommand("copy");
+        document.body.removeChild(ta);
+        addMessage("system", "Copied.");
+      } catch {
+        addMessage("system", "Copy failed.");
+      }
+    }
+  });
+}
+
+// dismiss menu on outside interaction
+window.addEventListener(
+  "click",
+  (e) => {
+    if (!el.msgMenu || el.msgMenu.classList.contains("hidden")) return;
+    const target = e.target;
+    if (target && el.msgMenu.contains(target)) return;
+    hideMsgMenu();
+  },
+  { capture: true },
+);
+
+window.addEventListener(
+  "scroll",
+  () => {
+    if (!el.msgMenu || el.msgMenu.classList.contains("hidden")) return;
+    hideMsgMenu();
+  },
+  { passive: true },
+);
 
 if (el.searchInput) {
   const onSearch = () => {

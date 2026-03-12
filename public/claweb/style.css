@@ -399,15 +399,26 @@ button:disabled {
   white-space: nowrap;
 }
 
-.msg-actions {
-  margin-top: 6px;
-  display: flex;
+.msg-menu {
+  position: fixed;
+  z-index: 50;
+  min-width: 140px;
+  padding: 6px;
+  border-radius: 12px;
+  border: 1px solid var(--line);
+  background: #ffffff;
+  box-shadow: 0 14px 30px rgba(12, 18, 28, 0.18);
+  display: grid;
   gap: 6px;
 }
 
-.msg-actions button {
-  padding: 6px 10px;
-  border-radius: 999px;
+.msg-menu.hidden {
+  display: none;
+}
+
+.msg-menu button {
+  width: 100%;
+  justify-content: flex-start;
 }
 
 @media (max-width: 720px) {
