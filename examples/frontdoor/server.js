@@ -9,6 +9,8 @@ import http from "node:http";
 import path from "node:path";
 import fs from "node:fs";
 import fsp from "node:fs/promises";
+import { execFile } from "node:child_process";
+import { promisify } from "node:util";
 import { randomUUID } from "node:crypto";
 import { fileURLToPath } from "node:url";
 import { WebSocketServer, WebSocket } from "ws";
@@ -17,6 +19,7 @@ const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
 
 const ENV = process.env;
+const execFileAsync = promisify(execFile);
 
 const BIND = (ENV.BIND || "127.0.0.1").trim();
 const PORT = Number(ENV.PORT || 18081);
@@ -39,6 +42,13 @@ const HISTORY_DIR = path.resolve(
 const MEDIA_DIR = path.resolve(
   __dirname,
   (ENV.CLAWEB_MEDIA_DIR || "./data/media").trim(),
+);
+
+const IMAGE_GEN_SCRIPT = path.resolve(
+  ENV.CLAWEB_IMAGE_GEN_SCRIPT || "/root/.openclaw/workspace/scripts/grok_image_gen.js",
+);
+const IMAGE_GEN_CWD = path.resolve(
+  ENV.CLAWEB_IMAGE_GEN_CWD || "/root/.openclaw/workspace",
 );
 
 const RECENT_LIMIT = Math.max(1, Math.min(1000, Number(ENV.CLAWEB_RECENT_LIMIT || 60) || 60));
@@ -153,6 +163,37 @@ function saveDataUrlImage(dataUrl, originalName = "image.png") {
 function buildAbsoluteMediaUrl(host, relUrl) {
   const safeHost = String(host || "").trim();
   return safeHost ? `https://${safeHost}${relUrl}` : relUrl;
+}
+
+function isExplicitImageIntent(text) {
+  const input = String(text || "").trim();
+  if (!input) return false;
+  if (/(视频|动起来|图生视频|文生视频|video)/i.test(input)) return false;
+  return /(画一个|画个|画一张|画张|画幅|画一幅|帮我画|请画|生成图片|生成一张图|生成个图|做个图|做一张图|来张图|做个头像|生成头像|画个头像|draw .*image|generate .*image)/i.test(
+    input,
+  );
+}
+
+async function generateImageUrlFromPrompt(prompt) {
+  const { stdout } = await execFileAsync("node", [IMAGE_GEN_SCRIPT, prompt], {
+    cwd: IMAGE_GEN_CWD,
+    timeout: 180000,
+    maxBuffer: 1024 * 1024,
+    env: process.env,
+  });
+  const url = String(stdout || "").trim().split(/\r?\n/).filter(Boolean).pop() || "";
+  if (!/^https?:\/\//i.test(url)) {
+    throw new Error(`invalid_image_url:${url || "empty"}`);
+  }
+  return url;
+}
+
+function guessImageMimeFromUrl(url) {
+  const raw = String(url || "").toLowerCase().replace(/[?#].*$/, "");
+  if (raw.endsWith(".jpg") || raw.endsWith(".jpeg")) return "image/jpeg";
+  if (raw.endsWith(".webp")) return "image/webp";
+  if (raw.endsWith(".gif")) return "image/gif";
+  return "image/png";
 }
 
 function historyKey({ userId, roomId, clientId }) {
@@ -851,6 +892,51 @@ wss.on("connection", (clientWs, req) => {
     state.inFlight.add(id);
 
     try {
+      if (textMsg && !mediaUrl && isExplicitImageIntent(textMsg)) {
+        log("info", "image_bridge_start", {
+          userId: state.session.userId,
+          roomId: state.session.roomId,
+          clientId: state.session.clientId,
+          messageId: id,
+        });
+        const bridgedImageUrl = await generateImageUrlFromPrompt(textMsg);
+        const asstMessageId = `asst_${randomUUID()}`;
+        const bridgedText = "给你生成好了～";
+        await appendRawMessage({
+          userId: state.session.userId,
+          roomId: state.session.roomId,
+          clientId: state.session.clientId,
+          message: {
+            role: "assistant",
+            text: bridgedText,
+            ts: Date.now(),
+            messageId: asstMessageId,
+            replyTo: id,
+            mediaUrl: bridgedImageUrl,
+            mediaType: guessImageMimeFromUrl(bridgedImageUrl),
+          },
+        });
+        state.inFlight.delete(id);
+        sendClient({
+          type: "message",
+          id: asstMessageId,
+          messageId: asstMessageId,
+          role: "assistant",
+          text: bridgedText,
+          replyTo: id,
+          mediaUrl: bridgedImageUrl,
+          mediaType: guessImageMimeFromUrl(bridgedImageUrl),
+        });
+        log("info", "image_bridge_done", {
+          userId: state.session.userId,
+          roomId: state.session.roomId,
+          clientId: state.session.clientId,
+          messageId: id,
+          mediaUrl: bridgedImageUrl,
+        });
+        return;
+      }
+
       ensureUpstream();
       if (state.upstream && state.upstream.readyState === WebSocket.OPEN) {
         state.upstream.send(
@@ -868,6 +954,7 @@ wss.on("connection", (clientWs, req) => {
         sendClient({ type: "error", id, message: "upstream_not_ready" });
       }
     } catch (e) {
+      state.inFlight.delete(id);
       sendClient({ type: "error", id, message: `proxy_failed: ${String(e)}` });
     }
   });
