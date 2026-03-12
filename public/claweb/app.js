@@ -392,7 +392,7 @@ function addMessageRich({
   body.className = "msg-body";
   body.textContent = text;
 
-  if (mediaUrl && String(mediaType || "").startsWith("image/")) {
+  if (mediaUrl && isProbablyImageMedia(mediaUrl, mediaType)) {
     const imgWrap = document.createElement("div");
     imgWrap.className = "msg-media";
 
@@ -588,6 +588,63 @@ function normalizeText(text) {
   return String(text == null ? "" : text).trim();
 }
 
+function normalizeStringArray(value) {
+  if (!Array.isArray(value)) return [];
+  return value.map((item) => normalizeText(item)).filter(Boolean);
+}
+
+function guessMediaTypeFromUrl(url) {
+  const raw = normalizeText(url);
+  if (!raw) return "";
+  if (raw.startsWith("data:image/")) {
+    const m = raw.match(/^data:(image\/[^;,]+)[;,]/i);
+    return normalizeText(m?.[1] || "image/*");
+  }
+  const clean = raw.split("?")[0].split("#")[0].toLowerCase();
+  if (clean.endsWith(".png")) return "image/png";
+  if (clean.endsWith(".jpg") || clean.endsWith(".jpeg")) return "image/jpeg";
+  if (clean.endsWith(".gif")) return "image/gif";
+  if (clean.endsWith(".webp")) return "image/webp";
+  if (clean.endsWith(".svg")) return "image/svg+xml";
+  if (clean.endsWith(".bmp")) return "image/bmp";
+  if (clean.endsWith(".avif")) return "image/avif";
+  return "";
+}
+
+function isProbablyImageMedia(mediaUrl, mediaType = "") {
+  const type = normalizeText(mediaType).toLowerCase();
+  if (type.startsWith("image/")) return true;
+  return !!guessMediaTypeFromUrl(mediaUrl);
+}
+
+function extractInlineMediaRefs(text) {
+  const source = String(text == null ? "" : text);
+  const refs = [];
+  const mediaMatches = source.match(/MEDIA\s*:\s*(data:image\/[^\s"')]+|https?:\/\/[^\s"')]+)/gi) || [];
+  for (const item of mediaMatches) {
+    const ref = normalizeText(item.replace(/^MEDIA\s*:\s*/i, ""));
+    if (ref) refs.push(ref);
+  }
+  if (!refs.length) {
+    const urlMatches = source.match(/https?:\/\/[^\s"')]+/gi) || [];
+    for (const item of urlMatches) {
+      if (guessMediaTypeFromUrl(item)) refs.push(normalizeText(item));
+    }
+  }
+  return [...new Set(refs.filter(Boolean))];
+}
+
+function stripInlineMediaText(text) {
+  const source = String(text == null ? "" : text).trim();
+  if (!source) return "";
+  const stripped = source
+    .replace(/MEDIA\s*:\s*(data:image\/[^\s"')]+|https?:\/\/[^\s"')]+)/gi, "")
+    .trim();
+  if (!stripped) return "";
+  if (/^https?:\/\/[^\s]+$/i.test(stripped) && guessMediaTypeFromUrl(stripped)) return "";
+  return stripped;
+}
+
 function normalizeId(value) {
   const id = String(value == null ? "" : value).trim();
   return id || null;
@@ -622,10 +679,17 @@ function isMessageRendered(message) {
 function normalizeIncomingMessage(frame) {
   if (!frame || frame.type !== "message") return null;
 
-  const text = normalizeText(frame.text);
-
-  const mediaUrl = normalizeText(frame.mediaUrl || frame.media || frame.mediaUrl);
-  const mediaType = normalizeText(frame.mediaType || frame.mime || frame.mediaMime);
+  const rawText = normalizeText(frame.text);
+  const frameMediaUrls = [
+    normalizeText(frame.mediaUrl),
+    normalizeText(frame.media),
+    ...normalizeStringArray(frame.mediaUrls),
+    ...normalizeStringArray(frame.media),
+  ].filter(Boolean);
+  const inlineMediaUrls = extractInlineMediaRefs(rawText);
+  const mediaUrl = frameMediaUrls[0] || inlineMediaUrls[0] || "";
+  const mediaType = normalizeText(frame.mediaType || frame.mime || frame.mediaMime || guessMediaTypeFromUrl(mediaUrl));
+  const text = mediaUrl ? stripInlineMediaText(rawText) : rawText;
 
   if (!text && !mediaUrl) return null;
 
@@ -712,6 +776,7 @@ async function loadRecentHistory() {
         messageId: item?.messageId,
         replyTo: item?.replyTo,
         mediaUrl: item?.mediaUrl,
+        mediaUrls: item?.mediaUrls,
         mediaType: item?.mediaType,
         ts: item?.ts,
       });
