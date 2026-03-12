@@ -57,6 +57,17 @@ The current frontdoor expects history files keyed by:
 
 - `{userId}__{roomId}__{clientId}.jsonl`
 
+## History record shape (raw JSONL)
+
+Each line is a minimal message record, typically:
+
+- `role`: `user` | `assistant` | `system`
+- `text`: string
+- `ts`: number (ms since epoch)
+- `messageId`: string (unique per message)
+- `_idx`: number (stable per-file insert index)
+- `replyTo`: string (optional; for assistant messages, points to the user turnId/messageId being answered)
+
 If you switch implementations and history appears "missing", run:
 
 ```bash
