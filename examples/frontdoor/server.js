@@ -687,9 +687,14 @@ wss.on("connection", (clientWs, req) => {
         const asstMessageId = `asst_${randomUUID()}`;
         const text = String(frame.text || "").trim();
         const incomingMediaUrl = String(frame.mediaUrl || "").trim();
+        const incomingMediaUrls = Array.isArray(frame.mediaUrls)
+          ? frame.mediaUrls.map((item) => String(item || "").trim()).filter(Boolean)
+          : [];
         const incomingMediaType = String(frame.mediaType || "").trim();
         const incomingMediaDataUrl = String(frame.mediaDataUrl || "").trim();
-        let mediaUrl = incomingMediaUrl || "";
+        const textHasMediaToken = /MEDIA\s*:/i.test(text);
+        const textImageUrls = Array.from(text.matchAll(/https?:\/\/[^\s"')]+/gi), (m) => String(m[0] || "").trim()).filter(Boolean);
+        let mediaUrl = incomingMediaUrl || incomingMediaUrls[0] || "";
         let mediaType = incomingMediaType || "";
 
         log("info", "assistant_frame", {
@@ -697,9 +702,14 @@ wss.on("connection", (clientWs, req) => {
           roomId: state.session.roomId,
           clientId: state.session.clientId,
           hasText: Boolean(text),
+          textPreview: text ? text.slice(0, 180) : null,
+          textHasMediaToken,
+          textImageUrlCount: textImageUrls.length,
           hasMediaUrl: Boolean(incomingMediaUrl),
+          mediaUrlsCount: incomingMediaUrls.length,
           hasMediaDataUrl: Boolean(incomingMediaDataUrl),
           mediaType: incomingMediaType || null,
+          keys: Object.keys(frame || {}),
         });
 
         if (!mediaUrl && incomingMediaDataUrl) {
