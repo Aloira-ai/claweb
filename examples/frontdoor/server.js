@@ -133,15 +133,26 @@ function safeFileSegment(s) {
 }
 
 function saveDataUrlImage(dataUrl, originalName = "image.png") {
-  const match = String(dataUrl || "").match(/^data:(image\/(png|jpeg|jpg|webp));base64,(.+)$/i);
+  const match = String(dataUrl || "").match(/^data:(image\/(png|jpeg|jpg|webp|gif));base64,(.+)$/i);
   if (!match) throw new Error("invalid_image_data");
   const mime = match[1].toLowerCase();
-  const ext = mime.includes("png") ? ".png" : mime.includes("webp") ? ".webp" : ".jpg";
+  const ext = mime.includes("png")
+    ? ".png"
+    : mime.includes("webp")
+      ? ".webp"
+      : mime.includes("gif")
+        ? ".gif"
+        : ".jpg";
   const safeBase = safeFileSegment(path.basename(originalName, path.extname(originalName))) || "image";
   const fileName = `${Date.now()}-${Math.random().toString(16).slice(2, 8)}-${safeBase}${ext}`;
   const filePath = path.join(MEDIA_DIR, fileName);
   fs.writeFileSync(filePath, Buffer.from(match[3], "base64"));
   return { filePath, mime, relUrl: `/media/${fileName}` };
+}
+
+function buildAbsoluteMediaUrl(host, relUrl) {
+  const safeHost = String(host || "").trim();
+  return safeHost ? `https://${safeHost}${relUrl}` : relUrl;
 }
 
 function historyKey({ userId, roomId, clientId }) {
@@ -542,8 +553,7 @@ const server = http.createServer(async (req, res) => {
 
     try {
       const saved = saveDataUrlImage(dataUrl, filename || "image.png");
-      const host = String(req.headers.host || "").trim();
-      const absUrl = host ? `https://${host}${saved.relUrl}` : saved.relUrl;
+      const absUrl = buildAbsoluteMediaUrl(req.headers.host, saved.relUrl);
       return json(res, 200, { ok: true, mediaUrl: absUrl, mediaType: saved.mime, relUrl: saved.relUrl });
     } catch {
       return json(res, 400, { ok: false, error: "upload_failed" });
@@ -676,12 +686,32 @@ wss.on("connection", (clientWs, req) => {
         const turnId = String(frame.id || "").trim() || null;
         const asstMessageId = `asst_${randomUUID()}`;
         const text = String(frame.text || "").trim();
+        const incomingMediaUrl = String(frame.mediaUrl || "").trim();
+        const incomingMediaType = String(frame.mediaType || "").trim();
+        const incomingMediaDataUrl = String(frame.mediaDataUrl || "").trim();
+        let mediaUrl = incomingMediaUrl || "";
+        let mediaType = incomingMediaType || "";
+
+        if (!mediaUrl && incomingMediaDataUrl) {
+          try {
+            const saved = saveDataUrlImage(incomingMediaDataUrl, "assistant-image.png");
+            mediaUrl = buildAbsoluteMediaUrl(req.headers.host, saved.relUrl);
+            mediaType = saved.mime;
+          } catch (error) {
+            log("warn", "assistant_media_save_failed", {
+              userId: state.session.userId,
+              roomId: state.session.roomId,
+              clientId: state.session.clientId,
+              error: String(error?.message || error),
+            });
+          }
+        }
 
         if (turnId && state.inFlight.has(turnId)) {
           state.inFlight.delete(turnId);
         }
 
-        if (text) {
+        if (text || mediaUrl) {
           await appendRawMessage({
             userId: state.session.userId,
             roomId: state.session.roomId,
@@ -692,6 +722,8 @@ wss.on("connection", (clientWs, req) => {
               ts: Date.now(),
               messageId: asstMessageId,
               replyTo: turnId,
+              mediaUrl: mediaUrl || undefined,
+              mediaType: mediaType || undefined,
             },
           });
         }
@@ -699,8 +731,12 @@ wss.on("connection", (clientWs, req) => {
         // Forward to browser with new id + replyTo
         sendClient({
           ...frame,
+          mediaDataUrl: undefined,
           id: asstMessageId,
           messageId: asstMessageId,
+          text,
+          mediaUrl: mediaUrl || undefined,
+          mediaType: mediaType || undefined,
           replyTo: frame.replyTo ?? frame.parentId ?? turnId ?? undefined,
         });
         scheduleCloseIfIdle();
