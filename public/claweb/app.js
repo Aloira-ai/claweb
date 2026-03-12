@@ -536,6 +536,8 @@ async function loadRecentHistory() {
         text: item?.text,
         messageId: item?.messageId,
         replyTo: item?.replyTo,
+        mediaUrl: item?.mediaUrl,
+        mediaType: item?.mediaType,
         ts: item?.ts,
       });
       if (renderNormalizedMessage(normalized)) restored += 1;

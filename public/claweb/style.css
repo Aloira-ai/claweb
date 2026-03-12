@@ -317,6 +317,7 @@ button:disabled {
   line-height: 1.5;
   white-space: pre-wrap;
   word-break: break-word;
+  overflow: hidden;
 }
 
 .msg-body {
@@ -328,10 +329,21 @@ button:disabled {
 }
 
 .msg-media img {
+  width: 100%;
+  height: auto;
   max-width: 100%;
+  max-height: 360px;
+  object-fit: contain;
   border-radius: 12px;
   border: 1px solid var(--line);
   display: block;
+  background: #fff;
+}
+
+@media (max-width: 720px) {
+  .msg-media img {
+    max-height: 48dvh;
+  }
 }
 
 .quote {
