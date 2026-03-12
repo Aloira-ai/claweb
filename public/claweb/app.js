@@ -67,6 +67,10 @@ const el = {
   loginBtn: document.getElementById("login-btn"),
   loginError: document.getElementById("login-error"),
   sessionDesc: document.getElementById("session-desc"),
+  appTitle: document.getElementById("app-title"),
+  brandTitle: document.getElementById("brand-title"),
+  gateAvatar: document.getElementById("gate-avatar"),
+  brandAvatar: document.getElementById("brand-avatar"),
   statusDot: document.getElementById("conn-status-dot"),
   statusText: document.getElementById("conn-status-text"),
   messages: document.getElementById("messages"),
@@ -108,6 +112,31 @@ function setStatus(text, cls) {
 
 function setLoginError(msg = "") {
   el.loginError.textContent = msg;
+}
+
+function applyUiBranding() {
+  const ui = window.CLAWEB_UI || {};
+  const title = String(ui.title || "CLAWeb Demo").trim() || "CLAWeb Demo";
+  const avatar = String(ui.avatar || "🌌").trim() || "🌌";
+  const avatarMode = String(ui.avatarMode || "emoji").trim();
+
+  if (el.appTitle) el.appTitle.textContent = title;
+  if (el.brandTitle) el.brandTitle.textContent = title;
+  if (document?.title) document.title = title;
+
+  const applyAvatar = (node) => {
+    if (!node) return;
+    if (avatarMode === "image") {
+      node.innerHTML = `<img src="${escapeHtml(avatar)}" alt="avatar" />`;
+      node.classList.add("avatar-image-mode");
+    } else {
+      node.textContent = avatar;
+      node.classList.remove("avatar-image-mode");
+    }
+  };
+
+  applyAvatar(el.gateAvatar);
+  applyAvatar(el.brandAvatar);
 }
 
 function addMessage(role, text, meta = "") {
@@ -383,6 +412,7 @@ function renderSearchResults(results, query) {
       if (target && typeof target.scrollIntoView === "function") {
         target.scrollIntoView({ block: "center", behavior: "smooth" });
       }
+      hideSearchModal();
     });
   });
 }
@@ -577,11 +607,9 @@ async function loadRecentHistory() {
     }
 
     if (!data.messages.length) {
-      addMessage("system", "No previous history for this session.");
       return;
     }
 
-    let restored = 0;
     for (const item of data.messages) {
       const normalized = normalizeIncomingMessage({
         type: "message",
@@ -593,9 +621,8 @@ async function loadRecentHistory() {
         mediaType: item?.mediaType,
         ts: item?.ts,
       });
-      if (renderNormalizedMessage(normalized)) restored += 1;
+      renderNormalizedMessage(normalized);
     }
-    addMessage("system", `Restored ${restored} recent message(s).`);
   } catch {
     addMessage("system", "Network error while loading history.");
   }
@@ -657,9 +684,7 @@ async function login() {
     state.renderedMessageKeys.clear();
     el.messages.innerHTML = "";
     showChatPanel(session);
-    addMessage("system", "Login succeeded. Loading recent history...");
     await loadRecentHistory();
-    addMessage("system", "Connecting to claweb...");
     connect();
   } catch {
     setLoginError("Network error. Please try again.");
@@ -713,7 +738,6 @@ function connect() {
     if (frame.type === "ready") {
       state.ready = true;
       setStatus("在线", "status-online");
-      addMessage("system", `claweb ready (${frame.serverVersion || "unknown"})`);
       return;
     }
 
@@ -1356,6 +1380,7 @@ function renderThreadsList(threads) {
   }
 }
 
+applyUiBranding();
 showLoginPanel();
 setStatus("离线", "status-offline");
 

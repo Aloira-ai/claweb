@@ -9,9 +9,10 @@
 <body>
   <main class="app">
     <section id="login-panel" class="panel gate-panel">
-      <header>
-        <h1>进入 CLAWeb</h1>
-        <p class="subtitle">输入口令，回到固定会话。</p>
+      <header class="gate-header">
+        <div id="gate-avatar" class="gate-avatar">🌌</div>
+        <h1 id="app-title">CLAWeb Demo</h1>
+        <p class="subtitle">输入口令，继续聊天。</p>
       </header>
 
       <div class="row">
@@ -29,9 +30,9 @@
     <section id="chat-panel" class="chat-shell hidden">
       <header class="chat-header">
         <div class="chat-brand">
-          <div class="brand-avatar">🌌</div>
+          <div id="brand-avatar" class="brand-avatar">🌌</div>
           <div class="brand-copy">
-            <h2>CLAWeb</h2>
+            <h2 id="brand-title">CLAWeb Demo</h2>
             <div class="brand-status-row">
               <span id="conn-status-dot" class="status-dot status-offline"></span>
               <span id="conn-status-text" class="brand-status-text">离线</span>
@@ -108,6 +109,13 @@
     </section>
   </main>
 
-  <script src="/claweb/app.js?v=20260312-24"></script>
+  <script>
+    window.CLAWEB_UI = {
+      title: "CLAWeb Demo",
+      avatar: "🌌",
+      avatarMode: "emoji"
+    };
+  </script>
+  <script src="/claweb/app.js?v=20260312-25"></script>
 </body>
 </html>

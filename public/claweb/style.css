@@ -64,9 +64,29 @@ body {
 
 .gate-panel {
   max-width: 420px;
-  padding: 22px;
+  padding: 26px 22px 22px;
   display: grid;
   gap: 14px;
+  background: rgba(255, 255, 255, 0.78);
+}
+
+.gate-header {
+  display: grid;
+  justify-items: center;
+  text-align: center;
+  gap: 10px;
+}
+
+.gate-avatar {
+  width: 68px;
+  height: 68px;
+  border-radius: 50%;
+  display: grid;
+  place-items: center;
+  font-size: 30px;
+  color: white;
+  background: var(--primary-gradient);
+  box-shadow: 0 10px 24px rgba(142, 140, 216, 0.24);
 }
 
 .chat-shell {
@@ -191,6 +211,18 @@ button {
   background: var(--primary-gradient);
   box-shadow: 0 8px 18px rgba(142, 140, 216, 0.32);
   flex: 0 0 auto;
+}
+
+.avatar-image-mode {
+  overflow: hidden;
+  padding: 0;
+}
+
+.avatar-image-mode img {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  display: block;
 }
 
 .brand-copy {
