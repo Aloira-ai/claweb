@@ -17,6 +17,30 @@ type MediaCandidate = {
   mediaType?: string;
 };
 
+function extractMediaRefsFromText(text: string): MediaCandidate[] {
+  const raw = String(text || "").trim();
+  if (!raw) return [];
+  const out: MediaCandidate[] = [];
+  const seen = new Set<string>();
+  const mediaTokenMatches = raw.match(/MEDIA\s*:\s*(data:image\/[^\s"')]+|https?:\/\/[^\s"')]+)/gi) || [];
+  for (const item of mediaTokenMatches) {
+    const ref = item.replace(/^MEDIA\s*:\s*/i, "").trim();
+    const mediaType = guessMediaType(ref);
+    if (!ref || seen.has(ref) || !isImageMediaType(mediaType)) continue;
+    seen.add(ref);
+    out.push({ ref, mediaType });
+  }
+  const urlMatches = raw.match(/https?:\/\/[^\s"')]+/gi) || [];
+  for (const item of urlMatches) {
+    const ref = String(item || "").trim();
+    const mediaType = guessMediaType(ref);
+    if (!ref || seen.has(ref) || !isImageMediaType(mediaType)) continue;
+    seen.add(ref);
+    out.push({ ref, mediaType });
+  }
+  return out;
+}
+
 function extractText(payload: unknown): string {
   if (!payload || typeof payload !== "object") {
     return "";
@@ -89,10 +113,11 @@ function pushCandidate(out: MediaCandidate[], seen: Set<string>, ref: unknown, m
 }
 
 function collectMediaCandidates(payload: unknown): MediaCandidate[] {
-  if (!payload || typeof payload !== "object") return [];
+  const textCandidates = extractMediaRefsFromText(extractText(payload));
+  if (!payload || typeof payload !== "object") return textCandidates;
   const p = payload as Record<string, unknown>;
-  const out: MediaCandidate[] = [];
-  const seen = new Set<string>();
+  const out: MediaCandidate[] = [...textCandidates];
+  const seen = new Set<string>(textCandidates.map((item) => item.ref));
 
   pushCandidate(out, seen, p.mediaUrl, p.mediaType);
   pushCandidate(out, seen, p.mediaPath, p.mediaType);
