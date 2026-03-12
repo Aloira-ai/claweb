@@ -57,6 +57,7 @@ const state = {
   messageIndex: new Map(), // messageId -> { text, node }
   assistantName: null,
   composingReplyTo: null,
+  pendingImage: null, // { file, dataUrl, filename, mime }
 };
 
 const el = {
@@ -85,6 +86,12 @@ const el = {
   msgMenu: document.getElementById("msg-menu"),
   msgMenuReply: document.getElementById("msg-menu-reply"),
   msgMenuCopy: document.getElementById("msg-menu-copy"),
+  imageBtn: document.getElementById("image-btn"),
+  imageInput: document.getElementById("image-input"),
+  imageBanner: document.getElementById("image-banner"),
+  imagePreview: document.getElementById("image-preview"),
+  imageName: document.getElementById("image-name"),
+  imageCancel: document.getElementById("image-cancel"),
 };
 
 function setStatus(text, cls) {
@@ -123,7 +130,15 @@ function showMsgMenu({ x, y, messageId, messageText }) {
   el.msgMenu.setAttribute("aria-hidden", "false");
 }
 
-function addMessageRich({ role, text, meta = "", messageId = null, replyTo = null }) {
+function addMessageRich({
+  role,
+  text,
+  meta = "",
+  messageId = null,
+  replyTo = null,
+  mediaUrl = null,
+  mediaType = null,
+}) {
   const node = document.createElement("div");
   node.className = `msg msg-${role}`;
 
@@ -205,6 +220,20 @@ function addMessageRich({ role, text, meta = "", messageId = null, replyTo = nul
   const body = document.createElement("div");
   body.className = "msg-body";
   body.textContent = text;
+
+  if (mediaUrl && String(mediaType || "").startsWith("image/")) {
+    const imgWrap = document.createElement("div");
+    imgWrap.className = "msg-media";
+
+    const img = document.createElement("img");
+    img.src = String(mediaUrl);
+    img.alt = "image";
+    img.loading = "lazy";
+    imgWrap.appendChild(img);
+
+    body.appendChild(imgWrap);
+  }
+
   node.appendChild(body);
 
   if (meta) {
@@ -417,7 +446,11 @@ function normalizeIncomingMessage(frame) {
   if (!frame || frame.type !== "message") return null;
 
   const text = normalizeText(frame.text);
-  if (!text) return null;
+
+  const mediaUrl = normalizeText(frame.mediaUrl || frame.media || frame.mediaUrl);
+  const mediaType = normalizeText(frame.mediaType || frame.mime || frame.mediaMime);
+
+  if (!text && !mediaUrl) return null;
 
   const explicitRole = ["role", "senderRole", "authorRole", "sender"]
     .map((key) => parseMessageRole(frame[key]))
@@ -436,11 +469,13 @@ function normalizeIncomingMessage(frame) {
 
   return {
     role,
-    text,
+    text: text || "",
     messageId: frameId,
     ts: normalizeTs(frame.ts || frame.timestamp),
     pendingId: linkedPendingId,
     replyTo: replyTo || null,
+    mediaUrl: mediaUrl || null,
+    mediaType: mediaType || null,
   };
 }
 
@@ -453,6 +488,8 @@ function renderNormalizedMessage(message) {
     text: message.text,
     messageId: message.messageId,
     replyTo: message.replyTo,
+    mediaUrl: message.mediaUrl,
+    mediaType: message.mediaType,
   });
 
   if (message.messageId) {
@@ -678,9 +715,64 @@ function connect() {
   });
 }
 
-function sendCurrentMessage() {
+async function readFileAsDataURL(file) {
+  return new Promise((resolve, reject) => {
+    const reader = new FileReader();
+    reader.onload = () => resolve(reader.result);
+    reader.onerror = reject;
+    reader.readAsDataURL(file);
+  });
+}
+
+function setPendingImage(file, dataUrl) {
+  state.pendingImage = {
+    file,
+    dataUrl,
+    filename: file?.name || "image.png",
+    mime: file?.type || "image/png",
+  };
+  if (el.imagePreview) el.imagePreview.src = String(dataUrl || "");
+  if (el.imageName) el.imageName.textContent = state.pendingImage.filename;
+  el.imageBanner?.classList.remove("hidden");
+}
+
+function clearPendingImage() {
+  state.pendingImage = null;
+  el.imageBanner?.classList.add("hidden");
+  if (el.imagePreview) el.imagePreview.src = "";
+  if (el.imageName) el.imageName.textContent = "";
+  try {
+    if (el.imageInput) el.imageInput.value = "";
+  } catch {}
+}
+
+async function uploadPendingImage() {
+  if (!state.pendingImage) return null;
+  const { resp, data } = await fetchJsonWithFallback("/upload", "/claweb/upload", {
+    method: "POST",
+    headers: {
+      "content-type": "application/json",
+      "x-claweb-token": state.session?.token || "",
+    },
+    body: JSON.stringify({
+      dataUrl: state.pendingImage.dataUrl,
+      filename: state.pendingImage.filename,
+    }),
+  });
+
+  if (!resp.ok || !data?.ok) {
+    throw new Error(data?.error || `upload_failed:${resp.status}`);
+  }
+
+  return {
+    mediaUrl: data.mediaUrl || data.relUrl,
+    mediaType: data.mediaType || state.pendingImage.mime,
+  };
+}
+
+async function sendCurrentMessage() {
   const text = el.input.value.trim();
-  if (!text) return;
+  if (!text && !state.pendingImage) return;
   if (!state.ws || !state.ready) {
     addMessage("system", "Not connected yet. Try again in a moment.");
     return;
@@ -688,13 +780,27 @@ function sendCurrentMessage() {
 
   const ts = Date.now();
   const id = nextMessageId(state.session && state.session.clientId);
+
+  let uploadResult = null;
+  try {
+    if (state.pendingImage) {
+      uploadResult = await uploadPendingImage();
+    }
+  } catch (e) {
+    addMessage("system", `Image upload failed: ${String(e?.message || e)}`);
+    return;
+  }
+
   const localMessage = {
     role: "user",
     text,
     messageId: id,
     replyTo: state.composingReplyTo,
+    mediaUrl: uploadResult?.mediaUrl || null,
+    mediaType: uploadResult?.mediaType || null,
     ts,
   };
+
   renderNormalizedMessage(localMessage);
   const msgNode = el.messages.lastElementChild;
   const metaNode = document.createElement("div");
@@ -708,12 +814,16 @@ function sendCurrentMessage() {
     id,
     text,
     replyTo: state.composingReplyTo || undefined,
+    mediaUrl: uploadResult?.mediaUrl || undefined,
+    mediaType: uploadResult?.mediaType || undefined,
     timestamp: ts,
   };
 
   try {
     state.ws.send(JSON.stringify(frame));
     el.input.value = "";
+    clearPendingImage();
+
     // clear reply mode after send
     state.composingReplyTo = null;
     el.replyBanner?.classList.add("hidden");
@@ -733,8 +843,15 @@ function logout() {
   state.renderedMessageKeys.clear();
   state.messageIndex.clear();
   state.composingReplyTo = null;
+  state.pendingImage = null;
   el.replyBanner?.classList.add("hidden");
   if (el.replyBannerText) el.replyBannerText.textContent = "";
+  el.imageBanner?.classList.add("hidden");
+  if (el.imagePreview) el.imagePreview.src = "";
+  if (el.imageName) el.imageName.textContent = "";
+  try {
+    if (el.imageInput) el.imageInput.value = "";
+  } catch {}
   el.messages.innerHTML = "";
   setStatus("Offline", "status-offline");
   showLoginPanel();
@@ -859,6 +976,35 @@ el.input.addEventListener("keydown", (event) => {
     sendCurrentMessage();
   }
 });
+
+// image pick
+if (el.imageBtn && el.imageInput) {
+  el.imageBtn.addEventListener("click", () => el.imageInput.click());
+  el.imageInput.addEventListener("change", async (e) => {
+    const file = e.target?.files?.[0];
+    if (!file || !String(file.type || "").startsWith("image/")) return;
+    const dataUrl = await readFileAsDataURL(file);
+    setPendingImage(file, dataUrl);
+  });
+}
+
+// paste image
+el.input.addEventListener("paste", async (e) => {
+  const items = Array.from(e.clipboardData?.items || []);
+  const imageItem = items.find((item) => item.type && item.type.startsWith("image/"));
+  if (!imageItem) return;
+  e.preventDefault();
+  const file = imageItem.getAsFile();
+  if (!file) return;
+  const ext = file.type.includes("png") ? "png" : file.type.includes("webp") ? "webp" : "jpg";
+  const namedFile = new File([file], `pasted-image.${ext}`, { type: file.type });
+  const dataUrl = await readFileAsDataURL(namedFile);
+  setPendingImage(namedFile, dataUrl);
+});
+
+if (el.imageCancel) {
+  el.imageCancel.addEventListener("click", clearPendingImage);
+}
 el.disconnectBtn.addEventListener("click", closeSocket);
 el.logoutBtn.addEventListener("click", logout);
 

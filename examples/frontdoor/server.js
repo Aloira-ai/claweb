@@ -36,6 +36,11 @@ const HISTORY_DIR = path.resolve(
   (ENV.CLAWEB_HISTORY_DIR || "./data/history").trim(),
 );
 
+const MEDIA_DIR = path.resolve(
+  __dirname,
+  (ENV.CLAWEB_MEDIA_DIR || "./data/media").trim(),
+);
+
 const RECENT_LIMIT = Math.max(1, Math.min(1000, Number(ENV.CLAWEB_RECENT_LIMIT || 60) || 60));
 const RECENT_TTL_DAYS = Math.max(1, Number(ENV.CLAWEB_RECENT_TTL_DAYS || 7) || 7);
 const RECENT_TTL_MS = RECENT_TTL_DAYS * 24 * 60 * 60 * 1000;
@@ -55,6 +60,7 @@ if (!UPSTREAM_TOKEN) {
 }
 
 await fsp.mkdir(HISTORY_DIR, { recursive: true });
+await fsp.mkdir(MEDIA_DIR, { recursive: true });
 
 // --- minimal observability ---
 const LOG_LEVEL = (ENV.CLAWEB_LOG_LEVEL || "info").trim().toLowerCase();
@@ -124,6 +130,18 @@ function safeFileSegment(s) {
     .trim()
     .replace(/[^a-zA-Z0-9._-]+/g, "_")
     .slice(0, 128);
+}
+
+function saveDataUrlImage(dataUrl, originalName = "image.png") {
+  const match = String(dataUrl || "").match(/^data:(image\/(png|jpeg|jpg|webp));base64,(.+)$/i);
+  if (!match) throw new Error("invalid_image_data");
+  const mime = match[1].toLowerCase();
+  const ext = mime.includes("png") ? ".png" : mime.includes("webp") ? ".webp" : ".jpg";
+  const safeBase = safeFileSegment(path.basename(originalName, path.extname(originalName))) || "image";
+  const fileName = `${Date.now()}-${Math.random().toString(16).slice(2, 8)}-${safeBase}${ext}`;
+  const filePath = path.join(MEDIA_DIR, fileName);
+  fs.writeFileSync(filePath, Buffer.from(match[3], "base64"));
+  return { filePath, mime, relUrl: `/media/${fileName}` };
 }
 
 function historyKey({ userId, roomId, clientId }) {
@@ -236,6 +254,9 @@ async function updateRecentSnapshot({ userId, roomId, clientId, record }) {
     text: record.text,
     ts: record.ts,
     messageId: record.messageId,
+    replyTo: record.replyTo || null,
+    mediaUrl: record.mediaUrl || null,
+    mediaType: record.mediaType || null,
     _idx: record._idx,
   });
 
@@ -282,6 +303,9 @@ async function appendRawMessage({ userId, roomId, clientId, message }) {
     text: message.text,
     ts: message.ts,
     messageId: message.messageId,
+    replyTo: message.replyTo || null,
+    mediaUrl: message.mediaUrl || null,
+    mediaType: message.mediaType || null,
     _idx: nextIdx,
   };
 
@@ -507,6 +531,45 @@ const server = http.createServer(async (req, res) => {
     });
   }
 
+  if (req.method === "POST" && url.pathname === "/upload") {
+    const session = requireSession(req);
+    if (!session) return json(res, 401, { ok: false, error: "unauthorized" });
+
+    const payload = await readJsonBody(req);
+    const dataUrl = payload?.dataUrl;
+    const filename = payload?.filename;
+    if (!dataUrl) return json(res, 400, { ok: false, error: "missing_data" });
+
+    try {
+      const saved = saveDataUrlImage(dataUrl, filename || "image.png");
+      const host = String(req.headers.host || "").trim();
+      const absUrl = host ? `https://${host}${saved.relUrl}` : saved.relUrl;
+      return json(res, 200, { ok: true, mediaUrl: absUrl, mediaType: saved.mime, relUrl: saved.relUrl });
+    } catch {
+      return json(res, 400, { ok: false, error: "upload_failed" });
+    }
+  }
+
+  if (req.method === "GET" && url.pathname.startsWith("/media/")) {
+    const file = safeFileSegment(url.pathname.slice("/media/".length));
+    if (!file) return notFound(res);
+    const filePath = path.join(MEDIA_DIR, file);
+    try {
+      const buf = await fsp.readFile(filePath);
+      const ext = path.extname(file).toLowerCase();
+      const mime = ext === ".png" ? "image/png" : ext === ".webp" ? "image/webp" : "image/jpeg";
+      res.writeHead(200, {
+        "content-type": mime,
+        "content-length": String(buf.length),
+        "cache-control": "public, max-age=31536000, immutable",
+      });
+      res.end(buf);
+    } catch {
+      return notFound(res);
+    }
+    return;
+  }
+
   // compat aliases
   if (url.pathname.startsWith("/claweb/")) {
     // strip prefix and re-dispatch
@@ -717,10 +780,12 @@ wss.on("connection", (clientWs, req) => {
     const id = String(frame.id || "").trim();
     const textMsg = String(frame.text || "").trim();
     const replyTo = frame.replyTo ? String(frame.replyTo).trim() : "";
+    const mediaUrl = frame.mediaUrl ? String(frame.mediaUrl).trim() : "";
+    const mediaType = frame.mediaType ? String(frame.mediaType).trim() : "";
     const ts = Number(frame.timestamp) || Date.now();
 
     if (!id) return sendClient({ type: "error", message: "missing id" });
-    if (!textMsg) return sendClient({ type: "error", id, message: "text is empty" });
+    if (!textMsg && !mediaUrl) return sendClient({ type: "error", id, message: "text is empty" });
 
     await appendRawMessage({
       userId: state.session.userId,
@@ -732,6 +797,8 @@ wss.on("connection", (clientWs, req) => {
         ts,
         messageId: id,
         replyTo: replyTo || undefined,
+        mediaUrl: mediaUrl || undefined,
+        mediaType: mediaType || undefined,
       },
     });
 
@@ -744,8 +811,10 @@ wss.on("connection", (clientWs, req) => {
           JSON.stringify({
             type: "message",
             id,
-            text: textMsg,
+            text: textMsg || "(image)",
             replyTo: replyTo || undefined,
+            mediaUrl: mediaUrl || undefined,
+            mediaType: mediaType || undefined,
             timestamp: ts,
           }),
         );

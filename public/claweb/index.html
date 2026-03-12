@@ -60,8 +60,22 @@
           <div class="reply-banner-text" id="reply-banner-text"></div>
           <button id="reply-cancel" type="button" class="ghost">Cancel</button>
         </div>
+
+        <div id="image-banner" class="image-banner hidden" aria-live="polite">
+          <img id="image-preview" class="image-preview" alt="selected image" />
+          <div class="image-banner-meta">
+            <div id="image-name" class="image-name">Image selected</div>
+            <div class="image-hint">Paste or pick an image, then Send</div>
+          </div>
+          <button id="image-cancel" type="button" class="ghost">Remove</button>
+        </div>
+
         <textarea id="message-input" rows="2" placeholder="Enter sends, Shift+Enter adds newline"></textarea>
-        <button id="send-btn" type="button">Send</button>
+        <div class="composer-actions">
+          <button id="image-btn" type="button" class="ghost">Image</button>
+          <input id="image-input" type="file" accept="image/*" class="hidden" />
+          <button id="send-btn" type="button">Send</button>
+        </div>
       </footer>
 
       <div id="msg-menu" class="msg-menu hidden" role="menu" aria-hidden="true">
@@ -76,6 +90,6 @@
     </section>
   </main>
 
-  <script src="/claweb/app.js?v=20260312-11"></script>
+  <script src="/claweb/app.js?v=20260312-12"></script>
 </body>
 </html>
