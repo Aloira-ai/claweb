@@ -1,4 +1,5 @@
 :root {
+  --app-height: 100dvh;
   --bg-color: #eef2f7;
   --chat-bg: rgba(255, 255, 255, 0.86);
   --surface: rgba(255, 255, 255, 0.92);
@@ -45,7 +46,7 @@ body {
 }
 
 .app {
-  min-height: 100dvh;
+  min-height: var(--app-height);
   display: grid;
   place-items: center;
   padding: 16px;
@@ -90,8 +91,8 @@ body {
 }
 
 .chat-shell {
-  min-height: min(900px, calc(100dvh - 32px));
-  height: calc(100dvh - 32px);
+  min-height: min(900px, calc(var(--app-height) - 32px));
+  height: calc(var(--app-height) - 32px);
   display: grid;
   grid-template-rows: auto minmax(0, 1fr) auto;
   overflow: hidden;
@@ -629,14 +630,22 @@ button:disabled {
 }
 
 @media (max-width: 720px) {
+  html,
+  body {
+    height: var(--app-height);
+    overflow: hidden;
+  }
+
   .app {
     padding: 0;
+    min-height: var(--app-height);
+    overflow: hidden;
   }
 
   .chat-shell {
     width: 100%;
-    height: 100dvh;
-    min-height: 100dvh;
+    height: var(--app-height);
+    min-height: var(--app-height);
     border-radius: 0;
     border: 0;
   }

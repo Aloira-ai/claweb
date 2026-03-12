@@ -114,11 +114,17 @@ function setLoginError(msg = "") {
   el.loginError.textContent = msg;
 }
 
-function applyUiBranding() {
+function getUiBranding() {
   const ui = window.CLAWEB_UI || {};
-  const title = String(ui.title || "CLAWeb Demo").trim() || "CLAWeb Demo";
-  const avatar = String(ui.avatar || "🌌").trim() || "🌌";
-  const avatarMode = String(ui.avatarMode || "emoji").trim();
+  return {
+    title: String(ui.title || "CLAWeb Demo").trim() || "CLAWeb Demo",
+    avatar: String(ui.avatar || "🌌").trim() || "🌌",
+    avatarMode: String(ui.avatarMode || "emoji").trim() || "emoji",
+  };
+}
+
+function applyUiBranding() {
+  const { title, avatar, avatarMode } = getUiBranding();
 
   if (el.appTitle) el.appTitle.textContent = title;
   if (el.brandTitle) el.brandTitle.textContent = title;
@@ -137,6 +143,12 @@ function applyUiBranding() {
 
   applyAvatar(el.gateAvatar);
   applyAvatar(el.brandAvatar);
+}
+
+function syncViewportHeight() {
+  const viewport = window.visualViewport;
+  const height = Math.max(320, Math.round(viewport?.height || window.innerHeight || 0));
+  document.documentElement.style.setProperty("--app-height", `${height}px`);
 }
 
 function addMessage(role, text, meta = "") {
@@ -454,11 +466,13 @@ function normalizeWsUrl(input) {
 function showChatPanel(session) {
   el.loginPanel.classList.add("hidden");
   el.chatPanel.classList.remove("hidden");
+  applyUiBranding();
   const label = session.displayName || session.identity || "当前会话";
   if (el.sessionDesc) {
     el.sessionDesc.textContent = label;
     el.sessionDesc.classList.add("hidden");
   }
+  syncViewportHeight();
   el.input.focus();
 }
 
@@ -1381,6 +1395,7 @@ function renderThreadsList(threads) {
 }
 
 applyUiBranding();
+syncViewportHeight();
 showLoginPanel();
 setStatus("离线", "status-offline");
 
@@ -1407,6 +1422,11 @@ el.input.addEventListener("keydown", (event) => {
   }
 });
 autoResizeInput();
+window.addEventListener("resize", syncViewportHeight, { passive: true });
+if (window.visualViewport) {
+  window.visualViewport.addEventListener("resize", syncViewportHeight, { passive: true });
+  window.visualViewport.addEventListener("scroll", syncViewportHeight, { passive: true });
+}
 
 // image pick
 if (el.imageBtn && el.imageInput) {
