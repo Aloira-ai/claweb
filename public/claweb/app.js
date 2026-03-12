@@ -501,12 +501,26 @@ function showThreadsModal() {
   if (!el.threadsModal) return;
   el.threadsModal.classList.remove("hidden");
   el.threadsModal.setAttribute("aria-hidden", "false");
+  try {
+    el.threadsClose?.focus();
+  } catch {
+    // ignore
+  }
 }
 
 function hideThreadsModal() {
   if (!el.threadsModal) return;
   el.threadsModal.classList.add("hidden");
   el.threadsModal.setAttribute("aria-hidden", "true");
+  try {
+    el.threadsBtn?.focus();
+  } catch {
+    // ignore
+  }
+}
+
+function isThreadsModalOpen() {
+  return !!el.threadsModal && !el.threadsModal.classList.contains("hidden");
 }
 
 async function loadThreads() {
@@ -611,6 +625,13 @@ if (el.threadsBtn) {
       addMessage("system", "Please login first.");
       return;
     }
+
+    // Toggle behavior: if it's already open, close it.
+    if (isThreadsModalOpen()) {
+      hideThreadsModal();
+      return;
+    }
+
     showThreadsModal();
     el.threadsList.textContent = "Loading...";
     try {
@@ -624,7 +645,11 @@ if (el.threadsBtn) {
 }
 
 if (el.threadsClose) {
-  el.threadsClose.addEventListener("click", hideThreadsModal);
+  el.threadsClose.addEventListener("click", (e) => {
+    e.preventDefault();
+    e.stopPropagation();
+    hideThreadsModal();
+  });
 }
 
 if (el.threadsModal) {
@@ -632,3 +657,9 @@ if (el.threadsModal) {
     if (e.target === el.threadsModal) hideThreadsModal();
   });
 }
+
+document.addEventListener("keydown", (e) => {
+  if (e.key === "Escape" && isThreadsModalOpen()) {
+    hideThreadsModal();
+  }
+});
