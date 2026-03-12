@@ -98,6 +98,13 @@ To match the frontend dedupe behavior, sort server history before returning:
 
 This keeps replay deterministic and avoids visible reordering after refresh.
 
+## Responsibility Split (client vs host)
+
+CLAWeb UI is a **native chat entry client**. It should not own memory strategy.
+
+- Client (CLAWeb UI): rendering, optimistic UI, connection/reconnect, message ids, quoting.
+- Host/OpenClaw: session identity, context assembly, memory strategy, persistence, history ordering.
+
 ## Message Consistency Rule
 
 When pushing `frame.type = "message"`:
