@@ -73,6 +73,11 @@ body {
   z-index: 50;
 }
 
+/* Ensure hidden always wins over modal display. */
+.modal.hidden {
+  display: none;
+}
+
 .modal-card {
   width: min(720px, 100%);
   background: var(--card);
