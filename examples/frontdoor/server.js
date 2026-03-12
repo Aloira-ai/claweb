@@ -693,7 +693,9 @@ wss.on("connection", (clientWs, req) => {
         const incomingMediaType = String(frame.mediaType || "").trim();
         const incomingMediaDataUrl = String(frame.mediaDataUrl || "").trim();
         const textHasMediaToken = /MEDIA\s*:/i.test(text);
-        const textImageUrls = Array.from(text.matchAll(/https?:\/\/[^\s"')]+/gi), (m) => String(m[0] || "").trim()).filter(Boolean).filter((url) => /\.(png|jpe?g|gif|webp|svg|bmp|avif)(?:$|[?#])/i.test(url));
+        const textImageUrls = Array.from(text.matchAll(/https?:\/\/[^\s"')]+/gi), (m) => String(m[0] || "").trim())
+          .filter(Boolean)
+          .filter((url) => /\.(png|jpe?g|gif|webp|svg|bmp|avif)(?:$|[?#])/i.test(url) || /^https?:\/\/gpi\.otd\.us\.kg\/images\//i.test(url));
         let mediaUrl = incomingMediaUrl || incomingMediaUrls[0] || textImageUrls[0] || "";
         let mediaType = incomingMediaType || "";
 
@@ -713,7 +715,8 @@ wss.on("connection", (clientWs, req) => {
         });
 
         if (!mediaType && mediaUrl) {
-          if (/\.png(?:$|[?#])/i.test(mediaUrl)) mediaType = "image/png";
+          if (/^https?:\/\/gpi\.otd\.us\.kg\/images\//i.test(mediaUrl)) mediaType = "image/jpeg";
+          else if (/\.png(?:$|[?#])/i.test(mediaUrl)) mediaType = "image/png";
           else if (/\.jpe?g(?:$|[?#])/i.test(mediaUrl)) mediaType = "image/jpeg";
           else if (/\.gif(?:$|[?#])/i.test(mediaUrl)) mediaType = "image/gif";
           else if (/\.webp(?:$|[?#])/i.test(mediaUrl)) mediaType = "image/webp";

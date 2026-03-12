@@ -89,6 +89,15 @@ function guessMediaType(ref: string): string | undefined {
   const dataMatch = raw.match(/^data:([^;,]+)[;,]/i);
   if (dataMatch?.[1]) return dataMatch[1].trim().toLowerCase();
 
+  try {
+    const parsed = new URL(raw);
+    const host = parsed.hostname.toLowerCase();
+    const pathname = parsed.pathname.toLowerCase();
+    if ((host === "gpi.otd.us.kg" || host.endsWith(".otd.us.kg")) && pathname.startsWith("/images/")) {
+      return "image/jpeg";
+    }
+  } catch {}
+
   const cleaned = raw.replace(/[?#].*$/, "").toLowerCase();
   if (cleaned.endsWith(".png")) return "image/png";
   if (cleaned.endsWith(".jpg") || cleaned.endsWith(".jpeg")) return "image/jpeg";

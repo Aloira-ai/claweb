@@ -600,6 +600,14 @@ function guessMediaTypeFromUrl(url) {
     const m = raw.match(/^data:(image\/[^;,]+)[;,]/i);
     return normalizeText(m?.[1] || "image/*");
   }
+  try {
+    const parsed = new URL(raw);
+    const host = normalizeText(parsed.hostname).toLowerCase();
+    const pathname = normalizeText(parsed.pathname).toLowerCase();
+    if ((host === "gpi.otd.us.kg" || host.endsWith(".otd.us.kg")) && pathname.startsWith("/images/")) {
+      return "image/jpeg";
+    }
+  } catch {}
   const clean = raw.split("?")[0].split("#")[0].toLowerCase();
   if (clean.endsWith(".png")) return "image/png";
   if (clean.endsWith(".jpg") || clean.endsWith(".jpeg")) return "image/jpeg";
