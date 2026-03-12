@@ -645,17 +645,22 @@ if (el.threadsBtn) {
 }
 
 if (el.threadsClose) {
-  el.threadsClose.addEventListener("click", (e) => {
+  const onClose = (e) => {
     e.preventDefault();
     e.stopPropagation();
     hideThreadsModal();
-  });
+  };
+  el.threadsClose.addEventListener("click", onClose);
+  el.threadsClose.addEventListener("touchstart", onClose, { passive: false });
 }
 
 if (el.threadsModal) {
-  el.threadsModal.addEventListener("click", (e) => {
+  const onBackdrop = (e) => {
     if (e.target === el.threadsModal) hideThreadsModal();
-  });
+  };
+  el.threadsModal.addEventListener("click", onBackdrop);
+  // Mobile hardening: some webviews are flaky with click; ensure touch also closes.
+  el.threadsModal.addEventListener("touchstart", onBackdrop, { passive: true });
 }
 
 document.addEventListener("keydown", (e) => {
