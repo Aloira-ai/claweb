@@ -45,6 +45,33 @@ npm i
 node server.js
 ```
 
+## Smoke tests
+
+### HTTP smoke
+
+```bash
+node scripts/smoke-http.js \
+  --base https://claweb.example.com \
+  --passphrase demo-passphrase \
+  --userId demo-passphrase --roomId demo-room --clientId demo-client \
+  --insecure
+```
+
+### WebSocket smoke
+
+```bash
+node scripts/smoke-ws.js \
+  --base https://claweb.example.com \
+  --passphrase demo-passphrase \
+  --clientId demo-client \
+  --message "ping" \
+  --insecure
+```
+
+This validates:
+- `hello -> ready`
+- assistant reply carries `replyTo` and does not collide ids with the user turn
+
 ## Upgrade / Migration
 
 ### Legacy history filename migration
