@@ -645,6 +645,8 @@ const server = http.createServer(async (req, res) => {
 
 // --- WS server (browser-facing) ---
 
+const ASSISTANT_FRAME_COALESCE_MS = 900;
+
 const wss = new WebSocketServer({ server, path: "/ws" });
 
 wss.on("connection", (clientWs, req) => {
@@ -655,6 +657,7 @@ wss.on("connection", (clientWs, req) => {
     upstream: null,
     clientConnected: true,
     inFlight: new Set(),
+    pendingAssistant: new Map(),
     closeTimer: null,
   };
 
@@ -678,6 +681,164 @@ wss.on("connection", (clientWs, req) => {
         state.upstream = null;
       }
     }, 60_000);
+  }
+
+  async function flushPendingAssistant(key) {
+    const pending = state.pendingAssistant.get(key);
+    if (!pending) return;
+    if (pending.timer) clearTimeout(pending.timer);
+    state.pendingAssistant.delete(key);
+
+    const turnId = pending.turnId;
+    const asstMessageId = `asst_${randomUUID()}`;
+    const text = String(pending.text || "").trim();
+    const incomingMediaUrl = String(pending.mediaUrl || "").trim();
+    const incomingMediaUrls = Array.isArray(pending.mediaUrls)
+      ? pending.mediaUrls.map((item) => String(item || "").trim()).filter(Boolean)
+      : [];
+    const incomingMediaType = String(pending.mediaType || "").trim();
+    const incomingMediaDataUrl = String(pending.mediaDataUrl || "").trim();
+    const textHasMediaToken = /MEDIA\s*:/i.test(text);
+    const textMediaRefs = Array.from(text.matchAll(/MEDIA\s*:\s*(data:(?:image|video)\/[^\s"')]+|https?:\/\/[^\s"')]+)/gi), (m) => String(m[1] || "").trim()).filter(Boolean);
+    let mediaUrl = incomingMediaUrl || incomingMediaUrls[0] || "";
+    let mediaType = incomingMediaType || guessRenderableMediaType(mediaUrl) || "";
+
+    log("info", "assistant_frame", {
+      userId: state.session.userId,
+      roomId: state.session.roomId,
+      clientId: state.session.clientId,
+      turnId,
+      mergedFrames: pending.frames,
+      hasText: Boolean(text),
+      textPreview: text ? text.slice(0, 180) : null,
+      textHasMediaToken,
+      textMediaRefCount: textMediaRefs.length,
+      hasMediaUrl: Boolean(incomingMediaUrl),
+      mediaUrlsCount: incomingMediaUrls.length,
+      hasMediaDataUrl: Boolean(incomingMediaDataUrl),
+      mediaType: incomingMediaType || null,
+      keys: Array.from(pending.keys),
+    });
+
+    if (!mediaUrl && textMediaRefs.length > 0) {
+      const ref = textMediaRefs[0];
+      const probedType = guessRenderableMediaType(ref) || (await probeRenderableMediaType(ref));
+      if (isRenderableMediaType(probedType)) {
+        mediaUrl = ref;
+        mediaType = probedType;
+      }
+    }
+
+    if (!mediaType && mediaUrl) {
+      mediaType = guessRenderableMediaType(mediaUrl) || (await probeRenderableMediaType(mediaUrl));
+    }
+
+    if (!mediaUrl && incomingMediaDataUrl) {
+      try {
+        const saved = saveDataUrlImage(incomingMediaDataUrl, "assistant-image.png");
+        mediaUrl = buildAbsoluteMediaUrl(req.headers.host, saved.relUrl);
+        mediaType = saved.mime;
+      } catch (error) {
+        log("warn", "assistant_media_save_failed", {
+          userId: state.session.userId,
+          roomId: state.session.roomId,
+          clientId: state.session.clientId,
+          error: String(error?.message || error),
+        });
+      }
+    }
+
+    if (turnId && state.inFlight.has(turnId)) {
+      state.inFlight.delete(turnId);
+    }
+
+    if (text || mediaUrl) {
+      await appendRawMessage({
+        userId: state.session.userId,
+        roomId: state.session.roomId,
+        clientId: state.session.clientId,
+        message: {
+          role: "assistant",
+          text,
+          ts: Date.now(),
+          messageId: asstMessageId,
+          replyTo: turnId,
+          mediaUrl: mediaUrl || undefined,
+          mediaType: mediaType || undefined,
+        },
+      });
+    }
+
+    sendClient({
+      ...pending.frame,
+      mediaDataUrl: undefined,
+      id: asstMessageId,
+      messageId: asstMessageId,
+      text,
+      mediaUrl: mediaUrl || undefined,
+      mediaType: mediaType || undefined,
+      replyTo: pending.replyTo ?? turnId ?? undefined,
+    });
+    scheduleCloseIfIdle();
+  }
+
+  function queueAssistantFrame(frame) {
+    const turnId = String(frame.id || "").trim() || null;
+    const key = turnId || `frame_${randomUUID()}`;
+    const current = state.pendingAssistant.get(key) || {
+      turnId,
+      frame: { ...frame },
+      text: "",
+      mediaUrl: "",
+      mediaUrls: [],
+      mediaType: "",
+      mediaDataUrl: "",
+      replyTo: frame.replyTo ?? frame.parentId ?? turnId ?? undefined,
+      keys: new Set(),
+      frames: 0,
+      timer: null,
+    };
+
+    const nextText = String(frame.text || "").trim();
+    if (nextText) {
+      if (!current.text) current.text = nextText;
+      else if (current.text !== nextText && !current.text.includes(nextText)) current.text = `${current.text}\n\n${nextText}`;
+    }
+
+    const nextMediaUrl = String(frame.mediaUrl || "").trim();
+    if (nextMediaUrl && !current.mediaUrl) current.mediaUrl = nextMediaUrl;
+
+    const nextMediaUrls = Array.isArray(frame.mediaUrls)
+      ? frame.mediaUrls.map((item) => String(item || "").trim()).filter(Boolean)
+      : [];
+    for (const item of nextMediaUrls) {
+      if (!current.mediaUrls.includes(item)) current.mediaUrls.push(item);
+    }
+
+    const nextMediaType = String(frame.mediaType || "").trim();
+    if (nextMediaType && !current.mediaType) current.mediaType = nextMediaType;
+
+    const nextMediaDataUrl = String(frame.mediaDataUrl || "").trim();
+    if (nextMediaDataUrl && !current.mediaDataUrl) current.mediaDataUrl = nextMediaDataUrl;
+
+    current.replyTo = current.replyTo ?? frame.replyTo ?? frame.parentId ?? turnId ?? undefined;
+    current.frame = { ...current.frame, ...frame, mediaUrls: current.mediaUrls };
+    current.frames += 1;
+    for (const item of Object.keys(frame || {})) current.keys.add(item);
+
+    if (current.timer) clearTimeout(current.timer);
+    current.timer = setTimeout(() => {
+      flushPendingAssistant(key).catch((error) => {
+        log("error", "assistant_frame_flush_failed", {
+          userId: state.session?.userId,
+          roomId: state.session?.roomId,
+          clientId: state.session?.clientId,
+          error: String(error?.message || error),
+        });
+      });
+    }, ASSISTANT_FRAME_COALESCE_MS);
+
+    state.pendingAssistant.set(key, current);
   }
 
   function ensureUpstream() {
@@ -730,106 +891,16 @@ wss.on("connection", (clientWs, req) => {
 
       if (frame.type === "message") {
         metrics.ws.upstreamMessage += 1;
-
-        // Upstream CLAWeb currently tends to reuse the user turn id as `frame.id`.
-        // To avoid id collisions (turnId vs messageId), we mint a new assistant message id
-        // and attach `replyTo` back to the original turn id.
-        const turnId = String(frame.id || "").trim() || null;
-        const asstMessageId = `asst_${randomUUID()}`;
-        const text = String(frame.text || "").trim();
-        const incomingMediaUrl = String(frame.mediaUrl || "").trim();
-        const incomingMediaUrls = Array.isArray(frame.mediaUrls)
-          ? frame.mediaUrls.map((item) => String(item || "").trim()).filter(Boolean)
-          : [];
-        const incomingMediaType = String(frame.mediaType || "").trim();
-        const incomingMediaDataUrl = String(frame.mediaDataUrl || "").trim();
-        const textHasMediaToken = /MEDIA\s*:/i.test(text);
-        const textMediaRefs = Array.from(text.matchAll(/MEDIA\s*:\s*(data:(?:image|video)\/[^\s"')]+|https?:\/\/[^\s"')]+)/gi), (m) => String(m[1] || "").trim()).filter(Boolean);
-        let mediaUrl = incomingMediaUrl || incomingMediaUrls[0] || "";
-        let mediaType = incomingMediaType || guessRenderableMediaType(mediaUrl) || "";
-
-        log("info", "assistant_frame", {
-          userId: state.session.userId,
-          roomId: state.session.roomId,
-          clientId: state.session.clientId,
-          hasText: Boolean(text),
-          textPreview: text ? text.slice(0, 180) : null,
-          textHasMediaToken,
-          textMediaRefCount: textMediaRefs.length,
-          hasMediaUrl: Boolean(incomingMediaUrl),
-          mediaUrlsCount: incomingMediaUrls.length,
-          hasMediaDataUrl: Boolean(incomingMediaDataUrl),
-          mediaType: incomingMediaType || null,
-          keys: Object.keys(frame || {}),
-        });
-
-        if (!mediaUrl && textMediaRefs.length > 0) {
-          const ref = textMediaRefs[0];
-          const probedType = guessRenderableMediaType(ref) || (await probeRenderableMediaType(ref));
-          if (isRenderableMediaType(probedType)) {
-            mediaUrl = ref;
-            mediaType = probedType;
-          }
-        }
-
-        if (!mediaType && mediaUrl) {
-          mediaType = guessRenderableMediaType(mediaUrl) || (await probeRenderableMediaType(mediaUrl));
-        }
-
-        if (!mediaUrl && incomingMediaDataUrl) {
-          try {
-            const saved = saveDataUrlImage(incomingMediaDataUrl, "assistant-image.png");
-            mediaUrl = buildAbsoluteMediaUrl(req.headers.host, saved.relUrl);
-            mediaType = saved.mime;
-          } catch (error) {
-            log("warn", "assistant_media_save_failed", {
-              userId: state.session.userId,
-              roomId: state.session.roomId,
-              clientId: state.session.clientId,
-              error: String(error?.message || error),
-            });
-          }
-        }
-
-        if (turnId && state.inFlight.has(turnId)) {
-          state.inFlight.delete(turnId);
-        }
-
-        if (text || mediaUrl) {
-          await appendRawMessage({
-            userId: state.session.userId,
-            roomId: state.session.roomId,
-            clientId: state.session.clientId,
-            message: {
-              role: "assistant",
-              text,
-              ts: Date.now(),
-              messageId: asstMessageId,
-              replyTo: turnId,
-              mediaUrl: mediaUrl || undefined,
-              mediaType: mediaType || undefined,
-            },
-          });
-        }
-
-        // Forward to browser with new id + replyTo
-        sendClient({
-          ...frame,
-          mediaDataUrl: undefined,
-          id: asstMessageId,
-          messageId: asstMessageId,
-          text,
-          mediaUrl: mediaUrl || undefined,
-          mediaType: mediaType || undefined,
-          replyTo: frame.replyTo ?? frame.parentId ?? turnId ?? undefined,
-        });
-        scheduleCloseIfIdle();
+        queueAssistantFrame(frame);
         return;
       }
     });
 
     upstream.on("close", (code, reason) => {
       metrics.ws.upstreamClose += 1;
+      for (const key of Array.from(state.pendingAssistant.keys())) {
+        flushPendingAssistant(key).catch(() => {});
+      }
       log("warn", "upstream_close", {
         userId: state.session.userId,
         roomId: state.session.roomId,
