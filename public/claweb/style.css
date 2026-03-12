@@ -391,6 +391,10 @@ button:disabled {
   background: #f6f8fc;
 }
 
+.reply-banner.hidden {
+  display: none;
+}
+
 .reply-banner-text {
   font-size: 12px;
   color: var(--muted);
