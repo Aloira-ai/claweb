@@ -167,7 +167,16 @@ async function resolveMedia(payload: unknown): Promise<{
 export function createWsDeliver(ws: WebSocket, messageId: string) {
   return async (payload: unknown) => {
     const text = extractText(payload);
+    const candidates = collectMediaCandidates(payload);
     const media = await resolveMedia(payload);
+    try {
+      const payloadKeys = payload && typeof payload === "object" ? Object.keys(payload as Record<string, unknown>).slice(0, 24) : [];
+      console.log(
+        `[claweb][deliver] messageId=${messageId} text=${text ? "yes" : "no"} candidates=${candidates.length} mediaUrl=${media.mediaUrl ? "yes" : "no"} mediaDataUrl=${media.mediaDataUrl ? "yes" : "no"} keys=${payloadKeys.join(",")}`,
+      );
+    } catch {
+      // ignore logging failure
+    }
     if (!text && !media.mediaUrl && !media.mediaDataUrl) {
       return;
     }

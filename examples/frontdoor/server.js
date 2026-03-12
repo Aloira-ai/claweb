@@ -692,6 +692,16 @@ wss.on("connection", (clientWs, req) => {
         let mediaUrl = incomingMediaUrl || "";
         let mediaType = incomingMediaType || "";
 
+        log("info", "assistant_frame", {
+          userId: state.session.userId,
+          roomId: state.session.roomId,
+          clientId: state.session.clientId,
+          hasText: Boolean(text),
+          hasMediaUrl: Boolean(incomingMediaUrl),
+          hasMediaDataUrl: Boolean(incomingMediaDataUrl),
+          mediaType: incomingMediaType || null,
+        });
+
         if (!mediaUrl && incomingMediaDataUrl) {
           try {
             const saved = saveDataUrlImage(incomingMediaDataUrl, "assistant-image.png");
