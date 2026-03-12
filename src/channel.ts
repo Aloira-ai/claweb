@@ -122,7 +122,7 @@ export function clawebPlugin(runtime: PluginRuntime): ChannelPlugin<ClawebAccoun
           port: account.listenPort,
           authToken,
           serverVersion: runtime.version,
-          onMessage: async ({ ws, userId, roomId, messageId, text, timestamp }) => {
+          onMessage: async ({ ws, userId, roomId, messageId, text, mediaUrl, mediaType, timestamp }) => {
             const cfg = await runtime.config.loadConfig();
             const chatType = roomId ? "group" : "direct";
             const route = core.routing.resolveAgentRoute({
@@ -135,6 +135,12 @@ export function clawebPlugin(runtime: PluginRuntime): ChannelPlugin<ClawebAccoun
               },
             });
 
+            if (mediaUrl) {
+              ctx.log?.info?.(
+                `[claweb] inbound media: type=${String(mediaType || "unknown")} url=${String(mediaUrl).slice(0, 120)}`,
+              );
+            }
+
             const inboundCtx = buildInboundCtx({
               runtime,
               channel: CHANNEL_ID,
@@ -143,6 +149,8 @@ export function clawebPlugin(runtime: PluginRuntime): ChannelPlugin<ClawebAccoun
               userId,
               roomId,
               text,
+              mediaUrl,
+              mediaType,
               messageId,
               timestamp,
             });

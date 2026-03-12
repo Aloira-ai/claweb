@@ -13,7 +13,9 @@ type ClawebHelloFrame = {
 type ClawebMessageFrame = {
   type: "message";
   id?: string;
-  text: string;
+  text?: string;
+  mediaUrl?: string;
+  mediaType?: string;
   timestamp?: number;
 };
 
@@ -47,6 +49,8 @@ type StartWsServerInput = {
     roomId?: string;
     messageId: string;
     text: string;
+    mediaUrl?: string;
+    mediaType?: string;
     timestamp: number;
   }) => Promise<void>;
 };
@@ -83,7 +87,10 @@ function isMessageFrame(frame: unknown): frame is ClawebMessageFrame {
     return false;
   }
   const record = frame as Record<string, unknown>;
-  return record.type === "message" && typeof record.text === "string";
+  if (record.type !== "message") return false;
+  const hasText = typeof record.text === "string";
+  const hasMedia = typeof record.mediaUrl === "string";
+  return hasText || hasMedia;
 }
 
 export async function startWsServer(input: StartWsServerInput): Promise<WsServerHandle> {
@@ -128,8 +135,11 @@ export async function startWsServer(input: StartWsServerInput): Promise<WsServer
         return;
       }
 
-      const text = parsed.text.trim();
-      if (!text) {
+      const text = typeof parsed.text === "string" ? parsed.text.trim() : "";
+      const mediaUrl = typeof parsed.mediaUrl === "string" ? parsed.mediaUrl.trim() : "";
+      const mediaType = typeof parsed.mediaType === "string" ? parsed.mediaType.trim() : "";
+
+      if (!text && !mediaUrl) {
         send(ws, { type: "error", id: parsed.id, message: "text is empty" });
         return;
       }
@@ -148,6 +158,8 @@ export async function startWsServer(input: StartWsServerInput): Promise<WsServer
           roomId: state.roomId,
           messageId,
           text,
+          mediaUrl: mediaUrl || undefined,
+          mediaType: mediaType || undefined,
           timestamp,
         });
       } catch (error) {

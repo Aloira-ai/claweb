@@ -8,6 +8,8 @@ type BuildInboundCtxInput = {
   userId: string;
   roomId?: string;
   text: string;
+  mediaUrl?: string;
+  mediaType?: string;
   messageId: string;
   timestamp: number;
 };
@@ -20,6 +22,8 @@ export function buildInboundCtx(input: BuildInboundCtxInput) {
     Body: input.text,
     RawBody: input.text,
     CommandBody: input.text,
+    MediaUrl: input.mediaUrl,
+    MediaType: input.mediaType,
     From: `claweb:${input.userId}`,
     To: input.roomId ? `claweb:room:${input.roomId}` : `claweb:${input.userId}`,
     SessionKey: input.sessionKey,
