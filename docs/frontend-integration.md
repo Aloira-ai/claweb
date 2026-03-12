@@ -106,6 +106,17 @@ When pushing `frame.type = "message"`:
 - If role is omitted, frontend uses a safe fallback and pending-link heuristic.
 - Frontend dedupes by `messageId` first, then by `(role, ts, text)` fallback.
 
+### Id semantics: turnId vs messageId (recommended)
+
+To avoid id collisions (and to support future multi-part replies), treat ids as:
+
+- Client → Server: `frame.id` = **turnId** (client-generated, stable for dedupe)
+- Server → Client (assistant message):
+  - `frame.id` / `frame.messageId` = **assistant messageId** (server-generated, unique per assistant message)
+  - `frame.replyTo` = **turnId** of the user message being answered
+
+Note: Some upstream implementations may still reuse `turnId` as `frame.id`. The recommended frontdoor implementation normalizes this by minting a new assistant message id and attaching `replyTo`.
+
 This captures the validated Phase 1 behavior:
 
 - normalize incoming messages,
