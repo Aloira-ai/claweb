@@ -29,6 +29,7 @@ The model is **frontend-experience first**: we specify what the UI must be able 
   - `role` (`"user" | "assistant" | "system"`)
   - `text` (string)
   - `messageId` (string; should be globally unique at least within `{userId, roomId, clientId}`)
+- `replyTo` (string, optional; for assistant messages, points to the user turnId/messageId being answered)
 
 **Ordering rule (must):**
 - Sort ascending by `ts`, then ascending by `_idx`.
