@@ -218,8 +218,15 @@ export function createWsDeliver(ws: WebSocket, messageId: string) {
     const media = await resolveMedia(payload);
     try {
       const payloadKeys = payload && typeof payload === "object" ? Object.keys(payload as Record<string, unknown>).slice(0, 24) : [];
+      const payloadObj = payload && typeof payload === "object" ? payload as Record<string, unknown> : null;
+      const rawMediaUrl = payloadObj ? String(payloadObj.mediaUrl || "").trim() : "";
+      const rawMediaUrls = payloadObj && Array.isArray(payloadObj.mediaUrls)
+        ? payloadObj.mediaUrls.map((item) => String(item || "").trim()).filter(Boolean)
+        : [];
+      const rawMediaDataUrl = payloadObj ? String(payloadObj.mediaDataUrl || "").trim() : "";
+      const textPreview = text ? text.slice(0, 240).replace(/\s+/g, " ") : "";
       console.log(
-        `[claweb][deliver] messageId=${messageId} text=${text ? "yes" : "no"} candidates=${candidates.length} mediaUrl=${media.mediaUrl ? "yes" : "no"} mediaDataUrl=${media.mediaDataUrl ? "yes" : "no"} mediaType=${media.mediaType || "none"} keys=${payloadKeys.join(",")}`,
+        `[claweb][deliver] messageId=${messageId} text=${text ? "yes" : "no"} textPreview=${JSON.stringify(textPreview)} candidates=${candidates.length} rawMediaUrl=${rawMediaUrl ? "yes" : "no"} rawMediaUrls=${rawMediaUrls.length} rawMediaDataUrl=${rawMediaDataUrl ? "yes" : "no"} mediaUrl=${media.mediaUrl ? "yes" : "no"} mediaDataUrl=${media.mediaDataUrl ? "yes" : "no"} mediaType=${media.mediaType || "none"} keys=${payloadKeys.join(",")}`,
       );
     } catch {
       // ignore logging failure
