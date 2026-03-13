@@ -2,85 +2,125 @@
 
 [English](./README.md) | [简体中文](./README.zh-CN.md)
 
-OpenClaw client-facing channel plugin plus a browser reference client.
+**CLAWeb is an OpenClaw client-facing channel with a browser reference client.**
 
-`claweb` keeps routing/session/reply flow inside OpenClaw while exposing a client-facing channel surface that can be consumed by web, app, desktop, or other clients. The browser UI in this repo is the first reference client, not the full boundary of the channel.
+It keeps routing, session flow, reply flow, and memory strategy inside OpenClaw while exposing a channel surface that can be consumed by web, app, desktop, or other clients.
 
-## What Is Included
+The browser UI in this repository is the **first reference client**, not the full product boundary.
 
-- WebSocket channel plugin runtime for OpenClaw.
-- Client-facing channel semantics for session, reply, history, and media handoff.
-- Browser reference client in `clients/browser/`.
-- Example configs and sample data in `examples/` for OpenClaw and fixed identity mapping.
-- An optional "frontdoor" reference host in `access/frontdoor/` (serves a client UI + implements /login /history /ws and proxies to upstream claweb channel).
+## Why CLAWeb exists
 
-## Current Scope (v0.2.0)
+CLAWeb is for the gap between:
+- OpenClaw's internal runtime / agent world
+- client applications that need login, history, realtime messaging, reply rendering, and media handoff
 
-Current repository scope includes a validated client-facing baseline for CLAWeb, with the browser UI as the first reference client:
+In other words:
+- OpenClaw owns routing, prompts, memory, and agent behavior
+- CLAWeb owns the client-facing channel contract and reference implementations
 
-- `hello -> ready -> message` websocket flow.
-- Browser-side message normalization and dedupe for realtime + history replay.
-- User echo identification to avoid duplicate role confusion.
-- History replay compatible with stable server-side sort (`ts`, `_idx`).
-- Protocol semantics for `hello -> ready -> message`, reply linking, history replay, and media handoff.
-- Safe-subset rich text rendering in the browser reference client.
-- Compact reply preview rendering plus history fallback.
-- Session persistence and automatic reconnect after refresh / background interruption in the browser reference client.
-- Image upload handling in the browser reference client with “keep original by default” and oversized-image compression fallback.
-- OpenClaw-standard media handoff compatibility (`MEDIA:` / `mediaUrl`) at the client/frontdoor layer.
+## What this repository contains
 
-Still out of scope in this repo:
+- **Channel runtime** in `src/`
+- **Reference access layer** in `access/frontdoor/`
+- **Browser reference client** in `clients/browser/`
+- **Example configs / sample data** in `examples/`
+- **Architecture / contract / integration docs** in `docs/`
 
-- Persona/prompt logic and memory injection.
-- Telegram or other private adapters.
-- A full production auth stack and ops hardening.
-- Arbitrary raw HTML rendering or executable rich content.
-- Turning CLAWeb itself into a video-generation or business-logic orchestration layer.
+## Current validated scope (`v0.2.0`)
 
-## Repository Layout
+The current repository baseline already validates:
 
-- `index.ts`: plugin entry and channel registration.
-- `src/`: channel runtime implementation.
-- `clients/browser/`: browser reference client (`index.html`, `style.css`, `app.js`).
-- `access/frontdoor/`: reference access host for `/login`, `/history`, `/ws`.
-- `examples/`: example configs and sample data only.
-- `examples/openclaw.config.example.jsonc`: minimal OpenClaw plugin config.
-- `examples/claweb-login.example.json`: fixed identity mapping example (non-secret placeholders).
+- `hello -> ready -> message` websocket flow
+- browser-side normalization and dedupe for realtime + history replay
+- stable history replay ordering (`ts`, `_idx`)
+- reply linking and compact reply preview fallback
+- safe-subset rich text rendering in the browser client
+- session persistence and automatic reconnect after refresh / background interruption
+- image upload flow with “keep original by default” behavior and oversized-image compression fallback
+- OpenClaw-standard media handoff compatibility (`MEDIA:` / `mediaUrl`)
 
-## Quick Start
+## Explicit non-goals
 
-1. Install dependencies: `npm install`
-2. Static check: `npm run typecheck`
-3. Load plugin from your OpenClaw profile.
+This repository does **not** currently own:
+
+- persona / prompt logic
+- memory injection strategy
+- Telegram or other private adapters
+- full production auth / ops hardening
+- arbitrary raw HTML or executable rich content
+- video-generation or business-logic orchestration inside CLAWeb itself
+
+## Repository map
+
+### 1) Channel runtime
+- `index.ts`
+- `src/`
+
+This is the actual CLAWeb channel layer inside OpenClaw.
+
+### 2) Reference access layer
+- `access/frontdoor/`
+
+This is the reference host for `/login`, `/history`, and `/ws`.
+It is not the channel runtime itself.
+
+### 3) Reference clients
+- `clients/browser/`
+
+This is the first browser reference client.
+It should not be treated as the whole boundary of CLAWeb.
+
+### 4) Examples
+- `examples/openclaw.config.example.jsonc`
+- `examples/claweb-login.example.json`
+
+This directory is for example configs and sample data only.
+
+## Quick start
+
+1. Install dependencies:
+   ```bash
+   npm install
+   ```
+2. Run static checks:
+   ```bash
+   npm run typecheck
+   ```
+3. Load the plugin from your OpenClaw profile.
 4. Configure `channels.claweb` using [`examples/openclaw.config.example.jsonc`](./examples/openclaw.config.example.jsonc).
-5. Serve `clients/browser/` from your web server (or use the reference host in `access/frontdoor/`) and wire these endpoints:
+5. Either:
+   - serve `clients/browser/` from your own web server, or
+   - use the reference access host in `access/frontdoor/`
+6. Wire these endpoints:
    - `POST /claweb/login`
    - `GET /claweb/history`
    - `WS /claweb/ws`
 
-Channel architecture layers: [`docs/channel-architecture.md`](./docs/channel-architecture.md).
+## Start here in the docs
 
-Channel contract (client-facing semantics): [`docs/channel-contract.md`](./docs/channel-contract.md).
+- Architecture: [`docs/channel-architecture.md`](./docs/channel-architecture.md)
+- Channel contract: [`docs/channel-contract.md`](./docs/channel-contract.md)
+- Browser client integration: [`docs/browser-client-integration.md`](./docs/browser-client-integration.md)
+- Project scope: [`docs/project-scope.md`](./docs/project-scope.md)
+- Docs index: [`docs/README.md`](./docs/README.md)
+- Regression checklist: [`docs/regression-checklist.md`](./docs/regression-checklist.md)
+- State model: [`docs/state-model.md`](./docs/state-model.md)
 
-Browser client integration contract for the browser reference client is documented in [`docs/browser-client-integration.md`](./docs/browser-client-integration.md).
+If you want the best current high-level summary of where the project stands, read:
+- [`docs/internal/CLAWeb-STAGE-SUMMARY.md`](./docs/internal/CLAWeb-STAGE-SUMMARY.md)
 
-Project scope and boundaries: [`docs/project-scope.md`](./docs/project-scope.md).
+## Public release position
 
-Pre/post change regression checklist (test site): [`docs/regression-checklist.md`](./docs/regression-checklist.md).
+- The repository is public-source oriented and currently tracked at the `0.2.x` milestone.
+- GitHub releases/tags are appropriate.
+- npm publishing is intentionally not enabled.
+- `package.json` keeps `"private": true` to prevent accidental npm publish.
 
-State model (raw/recent/runtime): [`docs/state-model.md`](./docs/state-model.md).
-
-## Public Release Position
-
-- This repository is public-source oriented and now tracked at the `0.2.x` milestone.
-- GitHub release tagging is appropriate; npm package publishing is still not enabled.
-- `package.json` keeps `"private": true` intentionally to prevent accidental npm publish.
-
-## Security Notes
+## Security notes
 
 - Never commit real passphrases, tokens, or user mapping files.
-- Keep only example placeholders in Git.
-- Prefer local binding (`127.0.0.1`) until explicit network hardening is implemented.
+- Keep only placeholder/example values in Git.
+- Prefer local binding (`127.0.0.1`) until explicit network hardening is in place.
 - See [`SECURITY.md`](./SECURITY.md).
 
 ## License

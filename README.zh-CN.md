@@ -2,99 +2,126 @@
 
 [English](./README.md) | [简体中文](./README.zh-CN.md)
 
-OpenClaw 的一个面向客户端接入的 channel，以及一个浏览器参考客户端。
+**CLAWeb 是 OpenClaw 的一个面向客户端接入的 channel，并附带一个浏览器参考客户端。**
 
-`claweb` 的目标是：**让路由、会话、回复流继续留在 OpenClaw 内部**，同时暴露一个可被 Web、App、PC 客户端等形态共同接入的 channel 表面，而不是把能力锁死在某个单一网页 UI 里。当前仓库中的浏览器 UI 只是第一个参考客户端，不是这个 channel 的全部边界。
+它的核心思路是：**把路由、会话流、reply 流、记忆策略继续留在 OpenClaw 内部**，而对外提供一个可被 Web、App、PC 客户端等形态共同消费的 channel 表面。
 
-## 这个仓库包含什么
+这个仓库里的浏览器 UI 只是 **第一个参考客户端**，不是 CLAWeb 的全部边界。
 
-- OpenClaw 的 WebSocket channel plugin 运行时。
-- 面向客户端接入的 channel 语义：session、reply、history、media handoff。
-- 位于 `clients/browser/` 的浏览器参考客户端。
-- 位于 `examples/` 的示例配置与示例数据（OpenClaw 配置与固定身份映射示例）。
-- 一个可选的“frontdoor”参考宿主，位于 `access/frontdoor/`：
-  - 提供客户端入口 UI
-  - 实现 `/login` / `/history` / `/ws`
-  - 并把消息代理到上游 `claweb` channel
+## 为什么会有 CLAWeb
 
-## 当前范围（v0.2.0）
+CLAWeb 解决的是这层空档：
+- 一边是 OpenClaw 内部 runtime / agent / skill 世界
+- 一边是客户端真正需要的登录、历史、实时消息、reply 展示、媒体承接
 
-当前仓库已经包含一条经过验证的、面向客户端接入的 CLAWeb 基线，而浏览器 UI 是第一个参考客户端：
+也就是说：
+- **OpenClaw** 负责路由、prompt、记忆、agent 行为
+- **CLAWeb** 负责面向客户端的 channel contract 与参考实现
 
-- `hello -> ready -> message` WebSocket 基本流程。
-- 浏览器侧的消息归一化与去重（兼容实时消息 + 历史回放）。
-- 用户 echo 识别，避免 role 混乱导致重复展示。
-- 历史回放兼容稳定排序（`ts`, `_idx`）。
-- channel 协议语义：`hello -> ready -> message`、reply 关联、history 回放、media handoff。
-- 浏览器参考客户端中的富文本安全子集：段落、换行、emoji、粗体、斜体、行内代码、代码块、列表、引用、安全链接。
-- reply preview 紧凑摘要与历史回填。
-- 浏览器参考客户端在页面刷新 / 切后台后的 session 恢复与自动重连。
-- 浏览器参考客户端的图片上传链路：普通图片默认原图发送，仅超大图走压缩兜底。
-- client / frontdoor 对 OpenClaw 标准媒体交接（`MEDIA:` / `mediaUrl`）的兼容承接。
+## 这个仓库现在包含什么
 
-当前 **仍不在本仓库范围内**：
+- **Channel runtime**：`src/`
+- **Reference access layer**：`access/frontdoor/`
+- **Browser reference client**：`clients/browser/`
+- **Example configs / sample data**：`examples/`
+- **Architecture / contract / integration docs**：`docs/`
 
-- 人格 / prompt / 记忆注入逻辑。
-- Telegram 或其他私有适配层。
-- 完整生产认证体系与运维加固。
-- 原始 HTML 富文本、任意内联样式、复杂表格、可执行内容。
-- 让 CLAWeb 自己承担视频生成或业务编排逻辑。
+## 当前已验证范围（`v0.2.0`）
 
-## 仓库结构
+当前仓库已经验证并收口了这些能力：
 
-- `index.ts`：插件入口与 channel 注册。
-- `src/`：channel 运行时实现。
-- `clients/browser/`：浏览器参考客户端（`index.html`, `style.css`, `app.js`）。
-- `access/frontdoor/`：reference access host 示例。
-- `examples/`：仅放示例配置与示例数据。
-- `examples/openclaw.config.example.jsonc`：最小 OpenClaw 插件配置示例。
-- `examples/claweb-login.example.json`：固定身份映射示例（仅占位符，不含真实密钥）。
+- `hello -> ready -> message` WebSocket 基本流程
+- 浏览器侧实时消息 + 历史回放的归一化与去重
+- 稳定的历史排序回放（`ts`, `_idx`）
+- reply 关联与紧凑 reply preview 回填
+- 浏览器客户端中的富文本安全子集
+- 页面刷新 / 切后台后的 session 持久化与自动重连
+- 图片上传链路中的“默认原图优先，仅超大图压缩兜底”
+- 对 OpenClaw 标准媒体交接（`MEDIA:` / `mediaUrl`）的兼容承接
+
+## 明确不在范围内的东西
+
+这个仓库 **当前不负责**：
+
+- 人格 / prompt 逻辑
+- 记忆注入策略
+- Telegram 或其他私有适配层
+- 完整生产级认证 / 运维加固
+- 原始 HTML / 可执行富内容
+- 让 CLAWeb 自己承担视频生成或业务编排
+
+## 仓库地图
+
+### 1）Channel runtime
+- `index.ts`
+- `src/`
+
+这是 OpenClaw 内部真正的 CLAWeb channel 层。
+
+### 2）Reference access layer
+- `access/frontdoor/`
+
+这里是 `/login`、`/history`、`/ws` 的参考 access host。  
+它不是 channel runtime 本体。
+
+### 3）Reference clients
+- `clients/browser/`
+
+这里是第一个浏览器参考客户端。  
+它不应被视为 CLAWeb 的全部边界。
+
+### 4）Examples
+- `examples/openclaw.config.example.jsonc`
+- `examples/claweb-login.example.json`
+
+这里只放示例配置与示例数据。
 
 ## 快速开始
 
-1. 安装依赖：`npm install`
-2. 静态检查：`npm run typecheck`
+1. 安装依赖：
+   ```bash
+   npm install
+   ```
+2. 运行静态检查：
+   ```bash
+   npm run typecheck
+   ```
 3. 在 OpenClaw profile 中加载插件。
 4. 参考 [`examples/openclaw.config.example.jsonc`](./examples/openclaw.config.example.jsonc) 配置 `channels.claweb`。
-5. 用你的 Web 服务托管 `clients/browser/`（或直接使用 `access/frontdoor/` 参考宿主），并接好这些接口：
+5. 二选一：
+   - 用你自己的 Web 服务托管 `clients/browser/`
+   - 或直接使用 `access/frontdoor/` 参考宿主
+6. 接好这些接口：
    - `POST /claweb/login`
    - `GET /claweb/history`
    - `WS /claweb/ws`
 
 ## 文档入口
 
-- channel 架构分层：[`docs/channel-architecture.md`](./docs/channel-architecture.md)
-- channel 协议约定：[`docs/channel-contract.md`](./docs/channel-contract.md)
-- 浏览器参考客户端接入约定：[`docs/browser-client-integration.md`](./docs/browser-client-integration.md)
+- 架构分层：[`docs/channel-architecture.md`](./docs/channel-architecture.md)
+- Channel 协议约定：[`docs/channel-contract.md`](./docs/channel-contract.md)
+- 浏览器客户端接入约定：[`docs/browser-client-integration.md`](./docs/browser-client-integration.md)
 - 项目范围与边界：[`docs/project-scope.md`](./docs/project-scope.md)
+- 文档总索引：[`docs/README.md`](./docs/README.md)
 - 回归检查清单：[`docs/regression-checklist.md`](./docs/regression-checklist.md)
-- 状态模型（raw / recent / runtime）：[`docs/state-model.md`](./docs/state-model.md)
-- 当前阶段总结：[`docs/internal/CLAWeb-STAGE-SUMMARY.md`](./docs/internal/CLAWeb-STAGE-SUMMARY.md)
+- 状态模型：[`docs/state-model.md`](./docs/state-model.md)
+
+如果你想最快理解“项目现在做到哪了”，建议先看：
+- [`docs/internal/CLAWeb-STAGE-SUMMARY.md`](./docs/internal/CLAWeb-STAGE-SUMMARY.md)
 
 ## 对外发布定位
 
-- 这个仓库目前偏向 **公开源码项目**，当前里程碑已进入 `0.2.x`。
-- 适合打 GitHub Release / tag，但仍未启用 npm 发布。
-- `package.json` 里保留了 `"private": true`，用于避免误发布到 npm。
+- 这个仓库目前偏向 **公开源码项目**，当前里程碑为 `0.2.x`
+- 适合打 GitHub Release / tag
+- 当前仍不做 npm 发布
+- `package.json` 中保留 `"private": true`，用于避免误发 npm
 
 ## 安全说明
 
-- 不要提交真实口令、token、用户映射文件。
-- Git 中只保留示例占位配置。
-- 在没有明确完成网络加固前，优先使用本地绑定（`127.0.0.1`）。
-- 详见 [`SECURITY.md`](./SECURITY.md)。
-
-## 当前阶段说明
-
-如果你想快速理解“这个项目现在做到哪了”，建议先看：
-
-- [`docs/internal/CLAWeb-STAGE-SUMMARY.md`](./docs/internal/CLAWeb-STAGE-SUMMARY.md)
-
-这份文档概括了：
-- 已验证的能力
-- 当前边界
-- repo 与测试站的关系
-- 下一阶段建议顺序
+- 不要提交真实口令、token、用户映射文件
+- Git 中只保留示例占位值
+- 在没有明确做完网络加固前，优先使用本地绑定（`127.0.0.1`）
+- 详见 [`SECURITY.md`](./SECURITY.md)
 
 ## License
 
