@@ -39,6 +39,16 @@ The current repository baseline already validates:
 - image upload flow with “keep original by default” behavior and oversized-image compression fallback
 - OpenClaw-standard media handoff compatibility (`MEDIA:` / `mediaUrl`)
 
+## Screenshots
+
+### Chat interface
+
+![CLAWeb chat interface](./docs/assets/screenshots/chat-interface.jpg)
+
+### Login / entry
+
+![CLAWeb login entry](./docs/assets/screenshots/login-entry.jpg)
+
 ## Explicit non-goals
 
 This repository does **not** currently own:

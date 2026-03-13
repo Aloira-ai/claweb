@@ -39,6 +39,16 @@ CLAWeb 解决的是这层空档：
 - 图片上传链路中的“默认原图优先，仅超大图压缩兜底”
 - 对 OpenClaw 标准媒体交接（`MEDIA:` / `mediaUrl`）的兼容承接
 
+## 截图预览
+
+### 聊天主界面
+
+![CLAWeb 聊天主界面](./docs/assets/screenshots/chat-interface.jpg)
+
+### 登录 / 入口页
+
+![CLAWeb 登录入口页](./docs/assets/screenshots/login-entry.jpg)
+
 ## 明确不在范围内的东西
 
 这个仓库 **当前不负责**：
