@@ -3,7 +3,7 @@
   "version": "0.2.0",
   "private": true,
   "type": "module",
-  "description": "OpenClaw Web Channel plugin with browser frontend example and frontdoor reference host",
+  "description": "OpenClaw client-facing channel plugin with browser reference client and frontdoor reference host",
   "main": "index.ts",
   "openclaw": {
     "extensions": [

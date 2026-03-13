@@ -2,30 +2,32 @@
 
 [English](./README.md) | [简体中文](./README.zh-CN.md)
 
-OpenClaw Web Channel plugin plus a browser frontend example.
+OpenClaw client-facing channel plugin plus a browser reference client.
 
-`claweb` keeps routing/session/reply flow inside OpenClaw while exposing a web-friendly channel surface.
+`claweb` keeps routing/session/reply flow inside OpenClaw while exposing a client-facing channel surface that can be consumed by web, app, desktop, or other clients. The browser UI in this repo is the first reference client, not the full boundary of the channel.
 
 ## What Is Included
 
 - WebSocket channel plugin runtime for OpenClaw.
-- Public browser frontend example in `public/claweb/`.
+- Client-facing channel semantics for session, reply, history, and media handoff.
+- Public browser reference client in `public/claweb/`.
 - Example configs in `examples/` for OpenClaw and fixed identity mapping.
-- An optional "frontdoor" example host in `examples/frontdoor/` (serves UI + implements /login /history /ws and proxies to upstream claweb channel).
+- An optional "frontdoor" reference host in `examples/frontdoor/` (serves a client UI + implements /login /history /ws and proxies to upstream claweb channel).
 
 ## Current Scope (v0.2.0)
 
-Current repository scope includes a validated browser-facing baseline for CLAWeb:
+Current repository scope includes a validated client-facing baseline for CLAWeb, with the browser UI as the first reference client:
 
 - `hello -> ready -> message` websocket flow.
 - Browser-side message normalization and dedupe for realtime + history replay.
 - User echo identification to avoid duplicate role confusion.
 - History replay compatible with stable server-side sort (`ts`, `_idx`).
-- Safe-subset rich text rendering in the browser frontend.
+- Protocol semantics for `hello -> ready -> message`, reply linking, history replay, and media handoff.
+- Safe-subset rich text rendering in the browser reference client.
 - Compact reply preview rendering plus history fallback.
-- Session persistence and automatic reconnect after refresh / background interruption.
-- Browser image upload with “keep original by default” handling and oversized-image compression fallback.
-- OpenClaw-standard media handoff compatibility (`MEDIA:` / `mediaUrl`) at the frontend/frontdoor layer.
+- Session persistence and automatic reconnect after refresh / background interruption in the browser reference client.
+- Image upload handling in the browser reference client with “keep original by default” and oversized-image compression fallback.
+- OpenClaw-standard media handoff compatibility (`MEDIA:` / `mediaUrl`) at the client/frontdoor layer.
 
 Still out of scope in this repo:
 
@@ -39,9 +41,10 @@ Still out of scope in this repo:
 
 - `index.ts`: plugin entry and channel registration.
 - `src/`: channel runtime implementation.
-- `public/claweb/`: browser frontend example (`index.html`, `style.css`, `app.js`).
+- `public/claweb/`: browser reference client (`index.html`, `style.css`, `app.js`).
 - `examples/openclaw.config.example.jsonc`: minimal OpenClaw plugin config.
 - `examples/claweb-login.example.json`: fixed identity mapping example (non-secret placeholders).
+- `examples/frontdoor/`: reference access host for `/login`, `/history`, `/ws`.
 
 ## Quick Start
 

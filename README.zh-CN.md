@@ -2,33 +2,35 @@
 
 [English](./README.md) | [简体中文](./README.zh-CN.md)
 
-OpenClaw 的 Web Channel 插件，以及一个浏览器前端示例。
+OpenClaw 的一个面向客户端接入的 channel，以及一个浏览器参考客户端。
 
-`claweb` 的目标是：**让路由、会话、回复流继续留在 OpenClaw 内部**，同时暴露一个适合网页接入的 channel 表面，而不是在 Web 层自己拼 prompt 和上下文。
+`claweb` 的目标是：**让路由、会话、回复流继续留在 OpenClaw 内部**，同时暴露一个可被 Web、App、PC 客户端等形态共同接入的 channel 表面，而不是把能力锁死在某个单一网页 UI 里。当前仓库中的浏览器 UI 只是第一个参考客户端，不是这个 channel 的全部边界。
 
 ## 这个仓库包含什么
 
 - OpenClaw 的 WebSocket channel plugin 运行时。
-- 位于 `public/claweb/` 的公开浏览器前端示例。
+- 面向客户端接入的 channel 语义：session、reply、history、media handoff。
+- 位于 `public/claweb/` 的公开浏览器参考客户端。
 - 位于 `examples/` 的示例配置（OpenClaw 配置与固定身份映射示例）。
-- 一个可选的“frontdoor”示例宿主，位于 `examples/frontdoor/`：
-  - 提供 UI
+- 一个可选的“frontdoor”参考宿主，位于 `examples/frontdoor/`：
+  - 提供客户端入口 UI
   - 实现 `/login` / `/history` / `/ws`
   - 并把消息代理到上游 `claweb` channel
 
 ## 当前范围（v0.2.0）
 
-当前仓库已经包含一条经过验证的、面向浏览器的 CLAWeb 基线：
+当前仓库已经包含一条经过验证的、面向客户端接入的 CLAWeb 基线，而浏览器 UI 是第一个参考客户端：
 
 - `hello -> ready -> message` WebSocket 基本流程。
 - 浏览器侧的消息归一化与去重（兼容实时消息 + 历史回放）。
 - 用户 echo 识别，避免 role 混乱导致重复展示。
 - 历史回放兼容稳定排序（`ts`, `_idx`）。
-- 前端富文本安全子集：段落、换行、emoji、粗体、斜体、行内代码、代码块、列表、引用、安全链接。
+- channel 协议语义：`hello -> ready -> message`、reply 关联、history 回放、media handoff。
+- 浏览器参考客户端中的富文本安全子集：段落、换行、emoji、粗体、斜体、行内代码、代码块、列表、引用、安全链接。
 - reply preview 紧凑摘要与历史回填。
-- 页面刷新 / 切后台后的 session 恢复与自动重连。
-- 浏览器图片上传链路：普通图片默认原图发送，仅超大图走压缩兜底。
-- 前端 / frontdoor 对 OpenClaw 标准媒体交接（`MEDIA:` / `mediaUrl`）的兼容承接。
+- 浏览器参考客户端在页面刷新 / 切后台后的 session 恢复与自动重连。
+- 浏览器参考客户端的图片上传链路：普通图片默认原图发送，仅超大图走压缩兜底。
+- client / frontdoor 对 OpenClaw 标准媒体交接（`MEDIA:` / `mediaUrl`）的兼容承接。
 
 当前 **仍不在本仓库范围内**：
 
@@ -42,10 +44,10 @@ OpenClaw 的 Web Channel 插件，以及一个浏览器前端示例。
 
 - `index.ts`：插件入口与 channel 注册。
 - `src/`：channel 运行时实现。
-- `public/claweb/`：浏览器前端示例（`index.html`, `style.css`, `app.js`）。
+- `public/claweb/`：浏览器参考客户端（`index.html`, `style.css`, `app.js`）。
 - `examples/openclaw.config.example.jsonc`：最小 OpenClaw 插件配置示例。
 - `examples/claweb-login.example.json`：固定身份映射示例（仅占位符，不含真实密钥）。
-- `examples/frontdoor/`：独立 frontdoor 示例宿主。
+- `examples/frontdoor/`：reference access host 示例。
 
 ## 快速开始
 
