@@ -2,6 +2,9 @@
 
 `public/claweb/` is the first browser reference client for the CLAWeb channel. It requires a host service that exposes three routes.
 
+This document is specifically about the browser reference client.
+For channel-wide semantics, see [`./channel-contract.md`](./channel-contract.md).
+
 This project prefers **root-path hosting** (open `/` to get the UI) with **short-path endpoints** (`/login`, `/history`, `/ws`).
 
 ## Required Routes

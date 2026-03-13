@@ -59,6 +59,8 @@ Still out of scope in this repo:
 
 Channel architecture layers: [`docs/channel-architecture.md`](./docs/channel-architecture.md).
 
+Channel contract (client-facing semantics): [`docs/channel-contract.md`](./docs/channel-contract.md).
+
 Frontend integration contract for the browser reference client is documented in [`docs/frontend-integration.md`](./docs/frontend-integration.md).
 
 Project scope and boundaries: [`docs/project-scope.md`](./docs/project-scope.md).

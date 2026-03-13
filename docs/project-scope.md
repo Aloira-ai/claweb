@@ -8,6 +8,7 @@
 
 - `claweb` is the source of truth for:
   - Client-facing channel contract
+  - Reference access contract
   - Reference client integration contract
   - Public browser reference client (`public/claweb/*`)
   - Login/history/ws access contract (`/claweb/login`, `/claweb/history`, `/claweb/ws`)
