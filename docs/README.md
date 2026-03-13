@@ -27,4 +27,4 @@ This repository is organized around three primary layers:
 - Channel runtime: `src/`
 - Reference access layer: `access/frontdoor/`
 - Browser reference client: `clients/browser/`
-- Example configs: `examples/`
+- Example configs / sample data: `examples/`

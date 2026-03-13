@@ -11,7 +11,7 @@ OpenClaw 的一个面向客户端接入的 channel，以及一个浏览器参考
 - OpenClaw 的 WebSocket channel plugin 运行时。
 - 面向客户端接入的 channel 语义：session、reply、history、media handoff。
 - 位于 `clients/browser/` 的浏览器参考客户端。
-- 位于 `examples/` 的示例配置（OpenClaw 配置与固定身份映射示例）。
+- 位于 `examples/` 的示例配置与示例数据（OpenClaw 配置与固定身份映射示例）。
 - 一个可选的“frontdoor”参考宿主，位于 `access/frontdoor/`：
   - 提供客户端入口 UI
   - 实现 `/login` / `/history` / `/ws`
@@ -46,6 +46,7 @@ OpenClaw 的一个面向客户端接入的 channel，以及一个浏览器参考
 - `src/`：channel 运行时实现。
 - `clients/browser/`：浏览器参考客户端（`index.html`, `style.css`, `app.js`）。
 - `access/frontdoor/`：reference access host 示例。
+- `examples/`：仅放示例配置与示例数据。
 - `examples/openclaw.config.example.jsonc`：最小 OpenClaw 插件配置示例。
 - `examples/claweb-login.example.json`：固定身份映射示例（仅占位符，不含真实密钥）。
 

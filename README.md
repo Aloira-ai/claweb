@@ -11,7 +11,7 @@ OpenClaw client-facing channel plugin plus a browser reference client.
 - WebSocket channel plugin runtime for OpenClaw.
 - Client-facing channel semantics for session, reply, history, and media handoff.
 - Browser reference client in `clients/browser/`.
-- Example configs in `examples/` for OpenClaw and fixed identity mapping.
+- Example configs and sample data in `examples/` for OpenClaw and fixed identity mapping.
 - An optional "frontdoor" reference host in `access/frontdoor/` (serves a client UI + implements /login /history /ws and proxies to upstream claweb channel).
 
 ## Current Scope (v0.2.0)
@@ -43,6 +43,7 @@ Still out of scope in this repo:
 - `src/`: channel runtime implementation.
 - `clients/browser/`: browser reference client (`index.html`, `style.css`, `app.js`).
 - `access/frontdoor/`: reference access host for `/login`, `/history`, `/ws`.
+- `examples/`: example configs and sample data only.
 - `examples/openclaw.config.example.jsonc`: minimal OpenClaw plugin config.
 - `examples/claweb-login.example.json`: fixed identity mapping example (non-secret placeholders).
 
