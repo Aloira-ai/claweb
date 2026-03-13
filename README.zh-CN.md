@@ -62,7 +62,8 @@ OpenClaw 的一个面向客户端接入的 channel，以及一个浏览器参考
 
 ## 文档入口
 
-- 前端接入约定：[`docs/frontend-integration.md`](./docs/frontend-integration.md)
+- channel 架构分层：[`docs/channel-architecture.md`](./docs/channel-architecture.md)
+- 浏览器参考客户端接入约定：[`docs/frontend-integration.md`](./docs/frontend-integration.md)
 - 项目范围与边界：[`docs/project-scope.md`](./docs/project-scope.md)
 - 回归检查清单：[`docs/regression-checklist.md`](./docs/regression-checklist.md)
 - 状态模型（raw / recent / runtime）：[`docs/state-model.md`](./docs/state-model.md)

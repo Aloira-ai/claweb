@@ -1,6 +1,6 @@
 # Frontend Integration Contract
 
-`public/claweb/` is a browser example UI. It requires a host service that exposes three routes.
+`public/claweb/` is the first browser reference client for the CLAWeb channel. It requires a host service that exposes three routes.
 
 This project prefers **root-path hosting** (open `/` to get the UI) with **short-path endpoints** (`/login`, `/history`, `/ws`).
 
@@ -100,7 +100,7 @@ This keeps replay deterministic and avoids visible reordering after refresh.
 
 ## Responsibility Split (client vs host)
 
-CLAWeb UI is a **native chat entry client**. It should not own memory strategy.
+The browser CLAWeb UI is a **reference chat entry client**. It should not own memory strategy, and it should not be treated as the entire boundary of the CLAWeb channel.
 
 - Client (CLAWeb UI): rendering, optimistic UI, connection/reconnect, message ids, quoting.
 - Host/OpenClaw: session identity, context assembly, memory strategy, persistence, history ordering.
