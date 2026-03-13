@@ -210,6 +210,19 @@ function historyKey({ userId, roomId, clientId }) {
   return [safeFileSegment(userId), safeFileSegment(roomId || "direct"), safeFileSegment(clientId)].join("__");
 }
 
+function compactReplyPreview(text, maxLen = 72) {
+  const compact = String(text || "")
+    .replace(/\r\n?/g, "\n")
+    .split("\n")
+    .map((line) => line.trim())
+    .filter(Boolean)
+    .join(" / ")
+    .replace(/\s+/g, " ")
+    .trim();
+  if (!compact) return "";
+  return compact.length > maxLen ? `${compact.slice(0, maxLen - 1)}…` : compact;
+}
+
 function rawHistoryPath(key) {
   return path.join(HISTORY_DIR, `${key}.jsonl`);
 }
@@ -319,6 +332,7 @@ async function updateRecentSnapshot({ userId, roomId, clientId, record }) {
     replyTo: record.replyTo || null,
     mediaUrl: record.mediaUrl || null,
     mediaType: record.mediaType || null,
+    replyPreview: record.replyPreview || null,
     _idx: record._idx,
   });
 
@@ -366,6 +380,7 @@ async function appendRawMessage({ userId, roomId, clientId, message }) {
     ts: message.ts,
     messageId: message.messageId,
     replyTo: message.replyTo || null,
+    replyPreview: message.replyPreview ? compactReplyPreview(message.replyPreview) : null,
     mediaUrl: message.mediaUrl || null,
     mediaType: message.mediaType || null,
     _idx: nextIdx,
@@ -397,6 +412,26 @@ async function loadRawHistory({ userId, roomId, clientId, limit }) {
         if (ta !== tb) return ta - tb;
         return Number(a._idx || 0) - Number(b._idx || 0);
       });
+
+    const previewByMessageId = new Map();
+    for (const m of sorted) {
+      const mid = String(m?.messageId || "").trim();
+      if (!mid) continue;
+      const preview = compactReplyPreview(m?.text || m?.replyPreview || "");
+      if (preview) previewByMessageId.set(mid, preview);
+    }
+    for (const m of sorted) {
+      if (!m || typeof m !== "object") continue;
+      if (m.replyPreview) {
+        m.replyPreview = compactReplyPreview(m.replyPreview);
+        continue;
+      }
+      const rid = String(m.replyTo || "").trim();
+      if (rid && previewByMessageId.has(rid)) {
+        m.replyPreview = previewByMessageId.get(rid);
+      }
+    }
+
     return n ? sorted.slice(-n) : sorted;
   }
 
@@ -421,6 +456,25 @@ async function loadRawHistory({ userId, roomId, clientId, limit }) {
       messages.push(m);
     } catch {
       // ignore
+    }
+  }
+
+  const previewByMessageId = new Map();
+  for (const m of messages) {
+    const mid = String(m?.messageId || "").trim();
+    if (!mid) continue;
+    const preview = compactReplyPreview(m?.text || m?.replyPreview || "");
+    if (preview) previewByMessageId.set(mid, preview);
+  }
+  for (const m of messages) {
+    if (!m || typeof m !== "object") continue;
+    if (m.replyPreview) {
+      m.replyPreview = compactReplyPreview(m.replyPreview);
+      continue;
+    }
+    const rid = String(m.replyTo || "").trim();
+    if (rid && previewByMessageId.has(rid)) {
+      m.replyPreview = previewByMessageId.get(rid);
     }
   }
 
@@ -646,7 +700,7 @@ const server = http.createServer(async (req, res) => {
 // --- WS server (browser-facing) ---
 
 const ASSISTANT_FRAME_COALESCE_MS = 900;
-const ASSISTANT_MEDIA_ONLY_COALESCE_MS = 20000;
+const ASSISTANT_MEDIA_ONLY_COALESCE_MS = 900;
 
 const wss = new WebSocketServer({ server, path: "/ws" });
 
@@ -765,6 +819,7 @@ wss.on("connection", (clientWs, req) => {
           ts: Date.now(),
           messageId: asstMessageId,
           replyTo: turnId,
+          replyPreview: pending.replyPreview || undefined,
           mediaUrl: mediaUrl || undefined,
           mediaType: mediaType || undefined,
         },
@@ -780,6 +835,7 @@ wss.on("connection", (clientWs, req) => {
       mediaUrl: mediaUrl || undefined,
       mediaType: mediaType || undefined,
       replyTo: pending.replyTo ?? turnId ?? undefined,
+      replyPreview: pending.replyPreview || undefined,
     });
     scheduleCloseIfIdle();
   }
@@ -796,6 +852,7 @@ wss.on("connection", (clientWs, req) => {
       mediaType: "",
       mediaDataUrl: "",
       replyTo: frame.replyTo ?? frame.parentId ?? turnId ?? undefined,
+      replyPreview: frame.replyPreview ? compactReplyPreview(String(frame.replyPreview)) : "",
       keys: new Set(),
       frames: 0,
       timer: null,
@@ -824,6 +881,7 @@ wss.on("connection", (clientWs, req) => {
     if (nextMediaDataUrl && !current.mediaDataUrl) current.mediaDataUrl = nextMediaDataUrl;
 
     current.replyTo = current.replyTo ?? frame.replyTo ?? frame.parentId ?? turnId ?? undefined;
+    current.replyPreview = current.replyPreview || (frame.replyPreview ? compactReplyPreview(String(frame.replyPreview)) : "");
     current.frame = { ...current.frame, ...frame, mediaUrls: current.mediaUrls };
     current.frames += 1;
     for (const item of Object.keys(frame || {})) current.keys.add(item);
@@ -977,6 +1035,7 @@ wss.on("connection", (clientWs, req) => {
     const id = String(frame.id || "").trim();
     const textMsg = String(frame.text || "").trim();
     const replyTo = frame.replyTo ? String(frame.replyTo).trim() : "";
+    const replyPreview = frame.replyPreview ? compactReplyPreview(String(frame.replyPreview)) : "";
     const mediaUrl = frame.mediaUrl ? String(frame.mediaUrl).trim() : "";
     const mediaType = frame.mediaType ? String(frame.mediaType).trim() : "";
     const ts = Number(frame.timestamp) || Date.now();
@@ -994,6 +1053,7 @@ wss.on("connection", (clientWs, req) => {
         ts,
         messageId: id,
         replyTo: replyTo || undefined,
+        replyPreview: replyPreview || undefined,
         mediaUrl: mediaUrl || undefined,
         mediaType: mediaType || undefined,
       },
@@ -1010,6 +1070,7 @@ wss.on("connection", (clientWs, req) => {
             id,
             text: textMsg || "(image)",
             replyTo: replyTo || undefined,
+            replyPreview: replyPreview || undefined,
             mediaUrl: mediaUrl || undefined,
             mediaType: mediaType || undefined,
             timestamp: ts,

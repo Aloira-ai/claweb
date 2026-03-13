@@ -307,6 +307,7 @@ function addMessageRich({
   meta = "",
   messageId = null,
   replyTo = null,
+  replyPreview = null,
   mediaUrl = null,
   mediaType = null,
 }) {
@@ -369,9 +370,11 @@ function addMessageRich({
     quote.tabIndex = 0;
 
     const quoted = state.messageIndex.get(normalizedReplyTo);
-    const quotedText = quoted?.text ? String(quoted.text) : "(message not in view)";
+    const quotedText = quoted?.text
+      ? String(quoted.text)
+      : (replyPreview ? String(replyPreview) : "(message not in view)");
 
-    quote.textContent = `Reply to: ${quotedText.slice(0, 140)}`;
+    quote.textContent = `Reply to: ${compactReplyPreview(quotedText, 72)}`;
 
     const jump = () => {
       const target = state.messageIndex.get(normalizedReplyTo)?.node;
@@ -390,7 +393,7 @@ function addMessageRich({
 
   const body = document.createElement("div");
   body.className = "msg-body";
-  body.textContent = text;
+  renderMessageText(body, text);
 
   if (mediaUrl && isProbablyImageMedia(mediaUrl, mediaType)) {
     const mediaWrap = document.createElement("div");
@@ -461,6 +464,202 @@ function escapeHtml(text) {
     .replaceAll(">", "&gt;")
     .replaceAll('"', "&quot;")
     .replaceAll("'", "&#39;");
+}
+
+function isSafeLinkHref(href) {
+  const raw = String(href || "").trim();
+  if (!raw) return false;
+  try {
+    const url = new URL(raw, window.location.origin);
+    return ["http:", "https:", "mailto:", "tel:"].includes(url.protocol);
+  } catch {
+    return false;
+  }
+}
+
+const ESCAPE_SENTINEL = "\uE000";
+
+function protectEscapedMarkdown(text) {
+  const source = String(text || "");
+  const escaped = [];
+  const protectedText = source.replace(/\\([\\`*\[\]\(\)])/g, (_, ch) => {
+    escaped.push(ch);
+    return `${ESCAPE_SENTINEL}${escaped.length - 1}${ESCAPE_SENTINEL}`;
+  });
+  return { protectedText, escaped };
+}
+
+function restoreEscapedMarkdown(text, escaped) {
+  return String(text || "").replace(/\uE000(\d+)\uE000/g, (_, idx) => {
+    const n = Number(idx);
+    return Number.isInteger(n) && n >= 0 && n < escaped.length ? escaped[n] : "";
+  });
+}
+
+function appendInlineMarkdown(parent, text) {
+  const { protectedText, escaped } = protectEscapedMarkdown(text);
+  const source = protectedText;
+  const tokenRe = /(\*\*([^\s*](?:[^\n]*?[^\s*])?)\*\*)|(\*([^\s*](?:[^\n]*?[^\s*])?)\*)|(`([^\n`]+?)`)|(\[([^\]]+)\]\(([^)\s]+)(?:\s+"[^"]*")?\))|(\n)/g;
+  let lastIndex = 0;
+  let match;
+
+  while ((match = tokenRe.exec(source))) {
+    if (match.index > lastIndex) {
+      parent.appendChild(document.createTextNode(restoreEscapedMarkdown(source.slice(lastIndex, match.index), escaped)));
+    }
+
+    if (match[1]) {
+      const strong = document.createElement("strong");
+      strong.textContent = restoreEscapedMarkdown(match[2] || "", escaped);
+      parent.appendChild(strong);
+    } else if (match[3]) {
+      const em = document.createElement("em");
+      em.textContent = restoreEscapedMarkdown(match[4] || "", escaped);
+      parent.appendChild(em);
+    } else if (match[5]) {
+      const code = document.createElement("code");
+      code.textContent = restoreEscapedMarkdown(match[6] || "", escaped);
+      parent.appendChild(code);
+    } else if (match[7]) {
+      const label = restoreEscapedMarkdown(match[8] || match[9] || "", escaped);
+      const href = restoreEscapedMarkdown(match[9] || "", escaped);
+      if (isSafeLinkHref(href)) {
+        const link = document.createElement("a");
+        link.href = href;
+        link.target = "_blank";
+        link.rel = "noopener noreferrer nofollow";
+        link.textContent = label;
+        parent.appendChild(link);
+      } else {
+        parent.appendChild(document.createTextNode(restoreEscapedMarkdown(match[0], escaped)));
+      }
+    } else if (match[10]) {
+      parent.appendChild(document.createElement("br"));
+    }
+
+    lastIndex = tokenRe.lastIndex;
+  }
+
+  if (lastIndex < source.length) {
+    parent.appendChild(document.createTextNode(restoreEscapedMarkdown(source.slice(lastIndex), escaped)));
+  }
+}
+
+function isMarkdownListLine(line) {
+  return /^\s*(?:[-*]\s+|\d+\.\s+)/.test(String(line || ""));
+}
+
+function isMarkdownQuoteLine(line) {
+  return /^\s*>\s?/.test(String(line || ""));
+}
+
+function isMarkdownFenceLine(line) {
+  return /^\s*```/.test(String(line || ""));
+}
+
+function renderRichTextFragment(text) {
+  const source = String(text || "").replace(/\r\n?/g, "\n");
+  const lines = source.split("\n");
+  const frag = document.createDocumentFragment();
+
+  if (!source) return frag;
+
+  let i = 0;
+  while (i < lines.length) {
+    const line = lines[i] || "";
+    const trimmed = line.trim();
+
+    if (!trimmed) {
+      i += 1;
+      continue;
+    }
+
+    if (isMarkdownFenceLine(line)) {
+      const fence = trimmed.match(/^```\s*(.*)$/);
+      const lang = String(fence?.[1] || "").trim();
+      const codeLines = [];
+      i += 1;
+      while (i < lines.length && !isMarkdownFenceLine(lines[i])) {
+        codeLines.push(lines[i]);
+        i += 1;
+      }
+      if (i < lines.length && isMarkdownFenceLine(lines[i])) i += 1;
+
+      const pre = document.createElement("pre");
+      const code = document.createElement("code");
+      if (lang) code.dataset.lang = lang;
+      code.textContent = codeLines.join("\n");
+      pre.appendChild(code);
+      frag.appendChild(pre);
+      continue;
+    }
+
+    if (isMarkdownQuoteLine(line)) {
+      const quoteLines = [];
+      while (i < lines.length && isMarkdownQuoteLine(lines[i])) {
+        quoteLines.push(String(lines[i]).replace(/^\s*>\s?/, ""));
+        i += 1;
+      }
+      const blockquote = document.createElement("blockquote");
+      appendInlineMarkdown(blockquote, quoteLines.join("\n"));
+      frag.appendChild(blockquote);
+      continue;
+    }
+
+    if (isMarkdownListLine(line)) {
+      const ordered = /^\s*\d+\.\s+/.test(line);
+      const list = document.createElement(ordered ? "ol" : "ul");
+      while (i < lines.length && isMarkdownListLine(lines[i])) {
+        const item = document.createElement("li");
+        const itemText = String(lines[i]).replace(/^\s*(?:[-*]\s+|\d+\.\s+)/, "");
+        appendInlineMarkdown(item, itemText);
+        list.appendChild(item);
+        i += 1;
+      }
+      frag.appendChild(list);
+      continue;
+    }
+
+    const paragraphLines = [];
+    while (
+      i < lines.length &&
+      lines[i].trim() &&
+      !isMarkdownFenceLine(lines[i]) &&
+      !isMarkdownQuoteLine(lines[i]) &&
+      !isMarkdownListLine(lines[i])
+    ) {
+      paragraphLines.push(lines[i]);
+      i += 1;
+    }
+
+    const paragraph = document.createElement("p");
+    appendInlineMarkdown(paragraph, paragraphLines.join("\n"));
+    frag.appendChild(paragraph);
+  }
+
+  return frag;
+}
+
+function renderMessageText(body, text) {
+  body.textContent = "";
+  const textWrap = document.createElement("div");
+  textWrap.className = "msg-text";
+  textWrap.appendChild(renderRichTextFragment(text));
+  body.appendChild(textWrap);
+}
+
+function compactReplyPreview(text, maxLen = 56) {
+  const compact = String(text || "")
+    .replace(/\r\n?/g, "\n")
+    .split("\n")
+    .map((line) => line.trim())
+    .filter(Boolean)
+    .join(" / ")
+    .replace(/\s+/g, " ")
+    .trim();
+
+  if (!compact) return "(empty)";
+  return compact.length > maxLen ? `${compact.slice(0, maxLen - 1)}…` : compact;
 }
 
 function showSearchResults() {
@@ -730,6 +929,7 @@ function normalizeIncomingMessage(frame) {
     ts: normalizeTs(frame.ts || frame.timestamp),
     pendingId: linkedPendingId,
     replyTo: replyTo || null,
+    replyPreview: normalizeText(frame.replyPreview || frame.replySnippet || frame.parentPreview) || null,
     mediaUrl: mediaUrl || null,
     mediaType: mediaType || null,
   };
@@ -744,12 +944,17 @@ function renderNormalizedMessage(message) {
     text: message.text,
     messageId: message.messageId,
     replyTo: message.replyTo,
+    replyPreview: message.replyPreview,
     mediaUrl: message.mediaUrl,
     mediaType: message.mediaType,
   });
 
   if (message.messageId) {
-    state.messageIndex.set(message.messageId, { text: message.text, node });
+    state.messageIndex.set(message.messageId, {
+      text: message.text,
+      replyPreview: message.replyPreview || compactReplyPreview(message.text, 72),
+      node,
+    });
   }
 
   markMessageRendered(message);
@@ -790,6 +995,7 @@ async function loadRecentHistory() {
         text: item?.text,
         messageId: item?.messageId,
         replyTo: item?.replyTo,
+        replyPreview: item?.replyPreview,
         mediaUrl: item?.mediaUrl,
         mediaUrls: item?.mediaUrls,
         mediaType: item?.mediaType,
@@ -1387,6 +1593,9 @@ async function sendCurrentMessage() {
     text,
     messageId: id,
     replyTo: state.composingReplyTo,
+    replyPreview: state.composingReplyTo
+      ? (state.messageIndex.get(state.composingReplyTo)?.replyPreview || state.messageIndex.get(state.composingReplyTo)?.text || null)
+      : null,
     mediaUrl: uploadResult?.mediaUrl || null,
     mediaType: uploadResult?.mediaType || null,
     ts,
@@ -1405,6 +1614,7 @@ async function sendCurrentMessage() {
     id,
     text,
     replyTo: state.composingReplyTo || undefined,
+    replyPreview: localMessage.replyPreview || undefined,
     mediaUrl: uploadResult?.mediaUrl || undefined,
     mediaType: uploadResult?.mediaType || undefined,
     timestamp: ts,
@@ -1643,7 +1853,7 @@ if (el.msgMenuReply) {
     const messageText = String(el.msgMenu?.dataset?.messageText || "");
     if (!messageId) return;
     state.composingReplyTo = messageId;
-    const snippet = messageText.slice(0, 140);
+    const snippet = compactReplyPreview(messageText, 56);
     if (el.replyBannerText) el.replyBannerText.textContent = `Replying to: ${snippet}`;
     el.replyBanner?.classList.remove("hidden");
     hideMsgMenu();
