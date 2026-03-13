@@ -1,5 +1,7 @@
 # claweb
 
+[English](./README.md) | [简体中文](./README.zh-CN.md)
+
 OpenClaw Web Channel plugin plus a browser frontend example.
 
 `claweb` keeps routing/session/reply flow inside OpenClaw while exposing a web-friendly channel surface.
