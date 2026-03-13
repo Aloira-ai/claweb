@@ -122,7 +122,7 @@ CLAWeb 解决的是这层空档：
 - 状态模型：[`docs/state-model.md`](./docs/state-model.md)
 
 如果你想最快理解“项目现在做到哪了”，建议先看：
-- [`docs/internal/CLAWeb-STAGE-SUMMARY.md`](./docs/internal/CLAWeb-STAGE-SUMMARY.md)
+- [`docs/project-status.md`](./docs/project-status.md)
 
 ## 对外发布定位
 

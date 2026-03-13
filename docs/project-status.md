@@ -1,6 +1,8 @@
-# CLAWeb Stage Summary — 2026-03-13
+# CLAWeb Project Status — 2026-03-13
 
-> 目的：给当前 `claweb` 仓库与运行中的测试站一个清晰的阶段基线，避免后续继续靠聊天记录续工。
+> This document summarizes the current validated status, boundaries, and next-step priorities of the public `claweb` repository.
+>
+> 这份文档用于帮助外部读者快速理解：CLAWeb 当前已验证到哪一步、边界在哪里、下一步重点应该放在哪。
 
 ## 1. 当前阶段判断
 

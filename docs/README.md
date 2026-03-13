@@ -20,7 +20,7 @@ This repository is organized around three primary layers:
 - Image pipeline: [`./image-pipeline.md`](./image-pipeline.md)
 - Execution plan / milestones: [`./execution-plan.md`](./execution-plan.md)
 - Project charter: [`./project-charter.md`](./project-charter.md)
-- Internal stage summary: [`./internal/CLAWeb-STAGE-SUMMARY.md`](./internal/CLAWeb-STAGE-SUMMARY.md)
+- Project status / current validated baseline: [`./project-status.md`](./project-status.md)
 
 ## Repository map
 

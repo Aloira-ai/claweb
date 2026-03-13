@@ -122,7 +122,7 @@ This directory is for example configs and sample data only.
 - State model: [`docs/state-model.md`](./docs/state-model.md)
 
 If you want the best current high-level summary of where the project stands, read:
-- [`docs/internal/CLAWeb-STAGE-SUMMARY.md`](./docs/internal/CLAWeb-STAGE-SUMMARY.md)
+- [`docs/project-status.md`](./docs/project-status.md)
 
 ## Public release position
 
