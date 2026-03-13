@@ -13,21 +13,27 @@ OpenClaw Web Channel plugin plus a browser frontend example.
 - Example configs in `examples/` for OpenClaw and fixed identity mapping.
 - An optional "frontdoor" example host in `examples/frontdoor/` (serves UI + implements /login /history /ws and proxies to upstream claweb channel).
 
-## MVP Boundary
+## Current Scope (v0.2.0)
 
-Current repository scope is text-first MVP:
+Current repository scope includes a validated browser-facing baseline for CLAWeb:
 
 - `hello -> ready -> message` websocket flow.
 - Browser-side message normalization and dedupe for realtime + history replay.
 - User echo identification to avoid duplicate role confusion.
 - History replay compatible with stable server-side sort (`ts`, `_idx`).
+- Safe-subset rich text rendering in the browser frontend.
+- Compact reply preview rendering plus history fallback.
+- Session persistence and automatic reconnect after refresh / background interruption.
+- Browser image upload with “keep original by default” handling and oversized-image compression fallback.
+- OpenClaw-standard media handoff compatibility (`MEDIA:` / `mediaUrl`) at the frontend/frontdoor layer.
 
-Out of scope in this repo:
+Still out of scope in this repo:
 
-- Media/upload/video.
-- Persona/prompt logic.
+- Persona/prompt logic and memory injection.
 - Telegram or other private adapters.
-- Real production auth stack and ops hardening.
+- A full production auth stack and ops hardening.
+- Arbitrary raw HTML rendering or executable rich content.
+- Turning CLAWeb itself into a video-generation or business-logic orchestration layer.
 
 ## Repository Layout
 
@@ -58,7 +64,8 @@ State model (raw/recent/runtime): [`docs/state-model.md`](./docs/state-model.md)
 
 ## Public Release Position
 
-- This repository is public-source oriented, but package publishing is not enabled yet.
+- This repository is public-source oriented and now tracked at the `0.2.x` milestone.
+- GitHub release tagging is appropriate; npm package publishing is still not enabled.
 - `package.json` keeps `"private": true` intentionally to prevent accidental npm publish.
 
 ## Security Notes

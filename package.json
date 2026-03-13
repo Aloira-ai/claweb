@@ -3,7 +3,7 @@
   "version": "0.2.0",
   "private": true,
   "type": "module",
-  "description": "OpenClaw Web Channel plugin (MVP-0 text closed loop)",
+  "description": "OpenClaw Web Channel plugin with browser frontend example and frontdoor reference host",
   "main": "index.ts",
   "openclaw": {
     "extensions": [

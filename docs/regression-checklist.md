@@ -42,17 +42,30 @@ This checklist is intended to be run on the public, browser-facing test site bef
 
 ### 7) WebSocket stability
 - [ ] Refresh while connected → reconnects cleanly
+- [ ] Switch the tab/app to background for a while, then return → session restores without re-login
 - [ ] No stuck “connecting…” state
+
+### 8) Rich text / reply preview
+- [ ] Send a message containing bold / italic / inline code / fenced code / list / quote → renders correctly
+- [ ] Send a reply to an earlier message → reply preview stays compact
+- [ ] Refresh the page → reply preview remains available in history
+
+### 9) Image upload quality
+- [ ] Upload a normal image (< 4MB) → browser keeps original instead of visibly aggressive compression
+- [ ] Upload an oversized image → system still falls back gracefully instead of failing the send
+
+### 10) Media handoff compatibility
+- [ ] If assistant returns OpenClaw-standard media (`MEDIA:` or structured `mediaUrl`) → frontend renders image/video instead of raw duplicated text
 
 ## P1 (Strongly Recommended)
 
-### 8) Detached reply persistence
+### 11) Detached reply persistence
 - [ ] Send a message that takes time
 - [ ] Immediately refresh/close the tab
 - [ ] Reopen after 10–30s
 - [ ] Assistant reply is persisted and appears in history
 
-### 9) Error surface (auth & upstream)
+### 12) Error surface (auth & upstream)
 - [ ] (Optional) Temporarily break auth (wrong passphrase) → UI shows auth error, does not hang
 - [ ] (Optional) If upstream WS is down → UI shows a clear error, pending is marked failed
 
