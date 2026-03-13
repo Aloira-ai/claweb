@@ -10,7 +10,7 @@
  *   node scripts/smoke-http.js \
  *     --base https://claweb.example.com \
  *     --passphrase demo-passphrase \
- *     --userId demo-passphrase --roomId demo-room --clientId demo-client \
+ *     --userId demo-user --roomId demo-room --clientId demo-client \
  *     --insecure
  */
 

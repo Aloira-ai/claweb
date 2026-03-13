@@ -1,4 +1,4 @@
-# CLAWeb 回收清单：从 `<private-first-party-webchat>` 到 `workspace/claweb`
+# CLAWeb 回收清单：从 first-party 私有验证壳子 到 `workspace/claweb`
 
 ## 目的
 在不把 first-party 验证壳子原样搬进公共仓库的前提下，梳理：
@@ -57,7 +57,7 @@
 - `workspace/claweb` 的服务端实现层（可能新增 HTTP/静态服务模块）
 - 或者 `examples/embedded-server/` 一类参考实现
 
-应回收的不是“整段 webchat server”，而是这几条通用规则：
+应回收的不是“整段 first-party webchat server”，而是这几条通用规则：
 - 历史持久化落服务端，不只靠浏览器 localStorage
 - 历史读取返回前按 `ts` 升序、`_idx` 稳定排序
 - 历史恢复与实时帧渲染共享同一去重规则
@@ -105,7 +105,7 @@
 - 回复完成后补写回服务端历史
 - 用户重进后能看到完整历史
 
-这已经是现网验证过的高价值能力，属于 claweb 的产品资产，不应长期只存在于 webchat 壳子里。
+这已经是现网验证过的高价值能力，属于 claweb 的产品资产，不应长期只存在于 first-party webchat 壳子里。
 
 ---
 
@@ -115,7 +115,7 @@
 可保留，但应重新定位为：
 - first-party example
 - 演示站实现
-- 兼容旧 webchat 服务下的嵌入式 demo
+- 兼容旧 first-party 部署壳子下的嵌入式 demo
 
 不应继续被当成：
 - 公共主实现唯一真身
@@ -138,7 +138,7 @@
 
 ## 三、不建议直接回收到 `claweb` 主项目的内容
 
-### A. `webchat/server.js` 整体文件
+### A. `<private-first-party-webchat>/server.js` 整体文件
 原因：
 - 里面混有大量与 first-party webchat prototype 绑定的逻辑：
   - `/api/auth`
@@ -157,7 +157,7 @@
 ### B. Persona / prompt / first-party 私有设定
 例如：
 - `SYSTEM_PROMPT`
-- demo-user-b / demo-passphrase / CLAWeb关系设定
+- demo-user-a / demo-user-b / assistant 关系设定
 - 任何陪伴关系特化文字
 
 这些都不属于通用 Web 入口层。
@@ -201,7 +201,7 @@
 6. 重写 README / SECURITY / examples
 
 ### P2（可后做）
-7. 决定 first-party demo 是否继续留在 webchat 目录
+7. 决定 first-party demo 是否继续留在 first-party webchat 目录
 8. 决定 npm/package 发布与 `private` 策略
 
 ---

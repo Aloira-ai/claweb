@@ -53,7 +53,7 @@ node server.js
 node scripts/smoke-http.js \
   --base https://claweb.example.com \
   --passphrase demo-passphrase \
-  --userId demo-passphrase --roomId demo-room --clientId demo-client \
+  --userId demo-user --roomId demo-room --clientId demo-client \
   --insecure
 ```
 
@@ -77,8 +77,8 @@ This validates:
 ### Legacy history filename migration
 
 Older deployments may store history as per-identity files like:
+- `demo-user-a.jsonl`
 - `demo-user-b.jsonl`
-- `demo-passphrase.jsonl`
 
 The current frontdoor expects history files keyed by:
 

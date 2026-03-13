@@ -47,9 +47,10 @@ async function tryReadJson(resp) {
 }
 
 const UI_STORAGE_KEY = "claweb:ui:branding:v1";
+const SESSION_STORAGE_KEY = "claweb:session:v1";
 const DEFAULT_UI = {
   title: "CLAWeb Demo",
-  characterName: "CLAWeb",
+  characterName: "Demo Assistant",
   avatar: "🌌",
   avatarMode: "emoji",
 };
@@ -67,6 +68,9 @@ const state = {
   uiBranding: { ...DEFAULT_UI },
   composingReplyTo: null,
   pendingImage: null, // { file, dataUrl, filename, mime, compressedDataUrl?, compressedMime?, stats?, compressionPromise?, compressing? }
+  reconnectTimer: null,
+  reconnectAttempts: 0,
+  manualDisconnect: false,
 };
 
 const el = {
@@ -163,6 +167,65 @@ function persistUiBranding() {
   } catch {
     // ignore
   }
+}
+
+function persistSession(session) {
+  try {
+    if (!session) return;
+    window.localStorage.setItem(SESSION_STORAGE_KEY, JSON.stringify({
+      ...session,
+      wsUrl: normalizeWsUrl(session.wsUrl),
+      clientId: String(session.clientId || ""),
+    }));
+  } catch {
+    // ignore
+  }
+}
+
+function clearStoredSession() {
+  try {
+    window.localStorage.removeItem(SESSION_STORAGE_KEY);
+  } catch {
+    // ignore
+  }
+}
+
+function loadStoredSession() {
+  try {
+    const raw = JSON.parse(window.localStorage.getItem(SESSION_STORAGE_KEY) || "null");
+    if (!raw || typeof raw !== "object") return null;
+    const session = {
+      ...raw,
+      wsUrl: normalizeWsUrl(raw.wsUrl),
+      clientId: String(raw.clientId || ""),
+      token: String(raw.token || ""),
+      userId: String(raw.userId || ""),
+    };
+    if (!session.clientId || !session.token || !session.userId || !session.wsUrl) return null;
+    return session;
+  } catch {
+    return null;
+  }
+}
+
+function cancelReconnect() {
+  if (!state.reconnectTimer) return;
+  clearTimeout(state.reconnectTimer);
+  state.reconnectTimer = null;
+}
+
+function scheduleReconnect() {
+  if (!state.session || state.manualDisconnect) return;
+  if (state.reconnectTimer) return;
+  const attempt = Math.min(state.reconnectAttempts + 1, 6);
+  state.reconnectAttempts = attempt;
+  const delay = Math.min(15000, attempt === 1 ? 1200 : 2000 * attempt);
+  setStatus(`重连中… ${Math.round(delay / 1000)}s`, "status-connecting");
+  state.reconnectTimer = window.setTimeout(() => {
+    state.reconnectTimer = null;
+    if (!state.session || state.manualDisconnect || state.ws) return;
+    connect({ resetBackoff: false });
+  }, delay);
 }
 
 function applyAvatarNode(node, avatar, avatarMode) {
@@ -448,10 +511,17 @@ function markPending(metaNode, status) {
   }
 }
 
-function closeSocket() {
+function closeSocket(opts = {}) {
+  const manual = opts.manual === true;
+  if (manual) {
+    state.manualDisconnect = true;
+    cancelReconnect();
+  }
   if (!state.ws) return;
+  const ws = state.ws;
+  state.ws = null;
   try {
-    state.ws.close();
+    ws.close();
   } catch {
     // ignore
   }
@@ -1061,6 +1131,10 @@ async function login() {
     state.switchTarget = null;
     await loadUiConfig();
     state.session = session;
+    state.manualDisconnect = false;
+    state.reconnectAttempts = 0;
+    cancelReconnect();
+    persistSession(session);
     state.renderedMessageKeys.clear();
     el.messages.innerHTML = "";
     showChatPanel(session);
@@ -1073,14 +1147,17 @@ async function login() {
   }
 }
 
-function connect() {
+function connect(opts = {}) {
   if (!state.session) {
     setLoginError("Missing session info. Please login again.");
     showLoginPanel();
     return;
   }
 
-  closeSocket();
+  cancelReconnect();
+  closeSocket({ manual: false });
+  state.manualDisconnect = false;
+  if (opts.resetBackoff !== false) state.reconnectAttempts = 0;
   setStatus("连接中", "status-connecting");
   state.ready = false;
 
@@ -1117,6 +1194,8 @@ function connect() {
 
     if (frame.type === "ready") {
       state.ready = true;
+      state.reconnectAttempts = 0;
+      cancelReconnect();
       setStatus("在线", "status-online");
       return;
     }
@@ -1160,13 +1239,18 @@ function connect() {
   });
 
   ws.addEventListener("close", () => {
-    setStatus("已断开", "status-offline");
+    if (state.ws === ws) state.ws = null;
+    setStatus(state.manualDisconnect ? "已断开" : "连接中断", "status-offline");
     state.ready = false;
 
     for (const pending of state.pendingById.values()) {
       markPending(pending.metaNode, "failed");
     }
     state.pendingById.clear();
+
+    if (!state.manualDisconnect && state.session) {
+      scheduleReconnect();
+    }
   });
 
   ws.addEventListener("error", () => {
@@ -1279,6 +1363,7 @@ async function compressImageSource(opts = {}) {
     sourceMime === "image/png" ||
     /screenshot|screen shot|snip|截屏|截图|屏幕快照/.test(sourceName);
 
+  const isLarge = !!srcBytes && srcBytes > 4 * 1024 * 1024;
   const isHuge = !!srcBytes && srcBytes > 8 * 1024 * 1024;
   const isVeryHuge = !!srcBytes && srcBytes > 14 * 1024 * 1024;
   const maxSide = Number(
@@ -1328,6 +1413,33 @@ async function compressImageSource(opts = {}) {
   const sw = Number(loaded?.width || 0);
   const sh = Number(loaded?.height || 0);
   if (!sw || !sh) throw new Error("bad_image_dimensions");
+
+  const shouldKeepOriginal =
+    !isLarge &&
+    !isHuge &&
+    !isVeryHuge &&
+    Math.max(sw, sh) <= 2400;
+
+  if (shouldKeepOriginal) {
+    try {
+      loaded.close?.();
+    } catch {
+      // ignore
+    }
+    return {
+      dataUrl: inputDataUrl,
+      mime: sourceMime || "image/png",
+      stats: {
+        srcBytes,
+        outBytes: srcBytes,
+        scaled: false,
+        width: sw,
+        height: sh,
+        quality: null,
+        strategy: looksLikeScreenshot ? "keep-original-screenshot" : "keep-original-photo",
+      },
+    };
+  }
 
   const scale = Math.min(1, maxSide / Math.max(sw, sh));
   const dw = Math.max(1, Math.round(sw * scale));
@@ -1449,7 +1561,7 @@ function setPendingImage(file, dataUrl) {
 
   if (el.imagePreview) el.imagePreview.src = String(dataUrl || "");
   if (el.imageName) el.imageName.textContent = state.pendingImage.filename;
-  if (el.imageHint) el.imageHint.textContent = "压缩中…（如果图片本来就很小，可能不会压缩）";
+  if (el.imageHint) el.imageHint.textContent = "检查图片中…（普通图片会优先原图发送，仅超大图才压缩）";
   el.imageBanner?.classList.remove("hidden");
 
   // Best-effort client-side compression to keep uploads fast on mobile.
@@ -1638,7 +1750,8 @@ async function sendCurrentMessage() {
 }
 
 function logout() {
-  closeSocket();
+  closeSocket({ manual: true });
+  clearStoredSession();
   state.session = null;
   state.ready = false;
   state.pendingById.clear();
@@ -1765,11 +1878,35 @@ function renderThreadsList(threads) {
   }
 }
 
-loadStoredUiBranding();
-applyUiBranding();
-syncViewportHeight();
-showLoginPanel();
-setStatus("离线", "status-offline");
+async function bootstrapApp() {
+  loadStoredUiBranding();
+  applyUiBranding();
+  syncViewportHeight();
+  setStatus("离线", "status-offline");
+
+  const restored = loadStoredSession();
+  if (!restored) {
+    showLoginPanel();
+    return;
+  }
+
+  try {
+    await loadUiConfig();
+  } catch {
+    // ignore and continue with stored session
+  }
+  state.session = restored;
+  state.manualDisconnect = false;
+  showChatPanel(restored);
+  try {
+    await loadRecentHistory();
+  } catch {
+    // ignore
+  }
+  connect();
+}
+
+bootstrapApp();
 
 el.loginBtn.addEventListener("click", login);
 el.passphrase.addEventListener("keydown", (event) => {
@@ -1795,6 +1932,19 @@ el.input.addEventListener("keydown", (event) => {
 });
 autoResizeInput();
 window.addEventListener("resize", syncViewportHeight, { passive: true });
+window.addEventListener("online", () => {
+  if (!state.session || state.ws || state.manualDisconnect) return;
+  connect({ resetBackoff: false });
+});
+document.addEventListener("visibilitychange", () => {
+  if (document.visibilityState !== "visible") return;
+  if (!state.session || state.ws || state.manualDisconnect) return;
+  connect({ resetBackoff: false });
+});
+window.addEventListener("pageshow", () => {
+  if (!state.session || state.ws || state.manualDisconnect) return;
+  connect({ resetBackoff: false });
+});
 if (window.visualViewport) {
   window.visualViewport.addEventListener("resize", syncViewportHeight, { passive: true });
   window.visualViewport.addEventListener("scroll", syncViewportHeight, { passive: true });
@@ -1830,7 +1980,8 @@ if (el.imageCancel) {
 }
 el.disconnectBtn.addEventListener("click", () => {
   hideMoreMenu();
-  closeSocket();
+  closeSocket({ manual: true });
+  setStatus("已断开", "status-offline");
 });
 el.logoutBtn.addEventListener("click", () => {
   hideMoreMenu();
