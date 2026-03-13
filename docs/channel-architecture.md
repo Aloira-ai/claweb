@@ -45,8 +45,8 @@ Responsibilities:
 - upstream proxying to OpenClaw claweb channel
 
 Current repo locations:
-- `examples/frontdoor/`
-- `docs/frontend-integration.md`
+- `access/frontdoor/`
+- `docs/browser-client-integration.md`
 - `docs/state-model.md`
 
 This layer is not the channel core, but it is the **reference way to access the channel from clients**.
@@ -56,7 +56,7 @@ This layer is not the channel core, but it is the **reference way to access the 
 This layer contains client implementations that consume the channel.
 
 Current first reference client:
-- browser client in `public/claweb/`
+- browser client in `clients/browser/`
 
 Responsibilities may include:
 - rendering

@@ -10,8 +10,8 @@ This doc records the **end-to-end image path** for CLAWeb, including the WS fram
 
 ## Entities
 
-- **Browser UI**: `/public/claweb/` (paste/pick image, preview, send).
-- **Frontdoor**: `/examples/frontdoor/server.js`
+- **Browser UI**: `/clients/browser/` (paste/pick image, preview, send).
+- **Frontdoor**: `/access/frontdoor/server.js`
   - Accepts `POST /upload` with a `dataUrl` payload.
   - Writes media to disk and returns a stable `mediaUrl` + `mediaType`.
   - Serves media via `GET /media/<file>`.

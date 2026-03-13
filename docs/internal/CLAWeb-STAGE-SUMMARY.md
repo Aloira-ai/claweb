@@ -96,10 +96,10 @@ repo 与测试站存在结构性差异是正常的；
 但**关键前端与 frontdoor 逻辑必须持续回灌到 repo 基线**。
 
 本轮已确认关键文件已同步回 repo：
-- `examples/frontdoor/server.js`
-- `public/claweb/app.js`
-- `public/claweb/index.html`
-- `public/claweb/style.css`
+- `access/frontdoor/server.js`
+- `clients/browser/app.js`
+- `clients/browser/index.html`
+- `clients/browser/style.css`
 
 ---
 

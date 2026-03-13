@@ -65,4 +65,4 @@
 
 ## 5. Reference Verification Surface（验证面）
 - 线上：`https://claweb.example.com/`
-- 参考 host：`examples/frontdoor/`
+- 参考 host：`access/frontdoor/`

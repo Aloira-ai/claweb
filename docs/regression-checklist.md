@@ -1,7 +1,7 @@
 # CLAWeb Regression Checklist (claweb.example.com)
 
 This checklist is intended to be run on the public, browser-facing test site before/after any change to:
-- `public/claweb/*` frontend code
+- `clients/browser/*` frontend code
 - `/claweb/login`, `/claweb/history`, `/claweb/ws` compatibility layer (proxy/frontdoor)
 - nginx/Cloudflare routing that affects CLAWeb
 

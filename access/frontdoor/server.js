@@ -23,7 +23,7 @@ const PORT = Number(ENV.PORT || 18081);
 
 const STATIC_ROOT = path.resolve(
   __dirname,
-  (ENV.CLAWEB_STATIC_ROOT || "../../public/claweb").trim(),
+  (ENV.CLAWEB_STATIC_ROOT || "../../clients/browser").trim(),
 );
 
 const LOGIN_CONFIG_PATH = path.resolve(

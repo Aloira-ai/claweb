@@ -12,7 +12,7 @@
 
 - GitHub 仓库：`Aloira-ai/claweb`
 - test 站：`claweb.example.com`（root `/` 即页面）
-- host：已切到 `examples/frontdoor` 参考实现
+- host：已切到 `access/frontdoor` 参考实现
 - canonical contract：`/login` `/history` `/ws`（兼容 `/claweb/*`）
 - history：raw JSONL + recent snapshot（60 条、TTL 7d）
 - 迁移：legacy history → keyed history 脚本已入仓库
@@ -33,8 +33,8 @@
 
 ### 1.2 Smoke 脚本（可选但强烈推荐）
 - 产物：
-  - `examples/frontdoor/scripts/smoke-http.js`
-  - `examples/frontdoor/scripts/smoke-ws.js`
+  - `access/frontdoor/scripts/smoke-http.js`
+  - `access/frontdoor/scripts/smoke-ws.js`
 - 覆盖：
   - `/login` 成功
   - `/history` 返回按 `ts,_idx` 排序
@@ -44,7 +44,7 @@
 验收：线上/本机都能一键跑通。
 
 ### 1.3 可观测性（frontdoor 侧）
-- 产物：`examples/frontdoor/server.js` 追加最小日志/计数（不引入重依赖）
+- 产物：`access/frontdoor/server.js` 追加最小日志/计数（不引入重依赖）
   - snapshot hit/miss
   - upstream close/error
   - per-session key 打印（userId/roomId/clientId）

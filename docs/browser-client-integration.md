@@ -1,9 +1,10 @@
-# Frontend Integration Contract
+# Browser Client Integration Contract
 
-`public/claweb/` is the first browser reference client for the CLAWeb channel. It requires a host service that exposes three routes.
+`clients/browser/` is the first browser reference client for the CLAWeb channel. It requires a host service that exposes three routes.
 
 This document is specifically about the browser reference client.
 For channel-wide semantics, see [`./channel-contract.md`](./channel-contract.md).
+Older docs may refer to this as `frontend-integration.md`.
 
 This project prefers **root-path hosting** (open `/` to get the UI) with **short-path endpoints** (`/login`, `/history`, `/ws`).
 

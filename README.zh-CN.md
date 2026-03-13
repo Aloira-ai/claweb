@@ -10,9 +10,9 @@ OpenClaw 的一个面向客户端接入的 channel，以及一个浏览器参考
 
 - OpenClaw 的 WebSocket channel plugin 运行时。
 - 面向客户端接入的 channel 语义：session、reply、history、media handoff。
-- 位于 `public/claweb/` 的公开浏览器参考客户端。
+- 位于 `clients/browser/` 的浏览器参考客户端。
 - 位于 `examples/` 的示例配置（OpenClaw 配置与固定身份映射示例）。
-- 一个可选的“frontdoor”参考宿主，位于 `examples/frontdoor/`：
+- 一个可选的“frontdoor”参考宿主，位于 `access/frontdoor/`：
   - 提供客户端入口 UI
   - 实现 `/login` / `/history` / `/ws`
   - 并把消息代理到上游 `claweb` channel
@@ -44,10 +44,10 @@ OpenClaw 的一个面向客户端接入的 channel，以及一个浏览器参考
 
 - `index.ts`：插件入口与 channel 注册。
 - `src/`：channel 运行时实现。
-- `public/claweb/`：浏览器参考客户端（`index.html`, `style.css`, `app.js`）。
+- `clients/browser/`：浏览器参考客户端（`index.html`, `style.css`, `app.js`）。
+- `access/frontdoor/`：reference access host 示例。
 - `examples/openclaw.config.example.jsonc`：最小 OpenClaw 插件配置示例。
 - `examples/claweb-login.example.json`：固定身份映射示例（仅占位符，不含真实密钥）。
-- `examples/frontdoor/`：reference access host 示例。
 
 ## 快速开始
 
@@ -55,7 +55,7 @@ OpenClaw 的一个面向客户端接入的 channel，以及一个浏览器参考
 2. 静态检查：`npm run typecheck`
 3. 在 OpenClaw profile 中加载插件。
 4. 参考 [`examples/openclaw.config.example.jsonc`](./examples/openclaw.config.example.jsonc) 配置 `channels.claweb`。
-5. 用你的 Web 服务托管 `public/claweb/`，并接好这些接口：
+5. 用你的 Web 服务托管 `clients/browser/`（或直接使用 `access/frontdoor/` 参考宿主），并接好这些接口：
    - `POST /claweb/login`
    - `GET /claweb/history`
    - `WS /claweb/ws`
@@ -64,7 +64,7 @@ OpenClaw 的一个面向客户端接入的 channel，以及一个浏览器参考
 
 - channel 架构分层：[`docs/channel-architecture.md`](./docs/channel-architecture.md)
 - channel 协议约定：[`docs/channel-contract.md`](./docs/channel-contract.md)
-- 浏览器参考客户端接入约定：[`docs/frontend-integration.md`](./docs/frontend-integration.md)
+- 浏览器参考客户端接入约定：[`docs/browser-client-integration.md`](./docs/browser-client-integration.md)
 - 项目范围与边界：[`docs/project-scope.md`](./docs/project-scope.md)
 - 回归检查清单：[`docs/regression-checklist.md`](./docs/regression-checklist.md)
 - 状态模型（raw / recent / runtime）：[`docs/state-model.md`](./docs/state-model.md)

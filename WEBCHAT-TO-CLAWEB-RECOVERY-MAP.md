@@ -8,7 +8,7 @@
 
 当前判断依据：
 - `workspace/claweb` 已有 **WebSocket channel plugin 主体**
-- `<private-first-party-webchat>/public/claweb/*` 已有 **真实验证过的浏览器端入口**
+- `<private-first-party-webchat>/clients/browser/*` 已有 **真实验证过的浏览器端入口**
 - `<private-first-party-webchat>/server.js` 里同时混有：
   - 通用的 CLAWeb 入口逻辑
   - first-party webchat prototype 专用逻辑
@@ -22,14 +22,14 @@
 
 ### A. 浏览器端静态前端（高优先）
 来源：
-- `/root/.openclaw/<private-first-party-webchat>/public/claweb/index.html`
-- `/root/.openclaw/<private-first-party-webchat>/public/claweb/style.css`
-- `/root/.openclaw/<private-first-party-webchat>/public/claweb/app.js`
+- `/root/.openclaw/<private-first-party-webchat>/clients/browser/index.html`
+- `/root/.openclaw/<private-first-party-webchat>/clients/browser/style.css`
+- `/root/.openclaw/<private-first-party-webchat>/clients/browser/app.js`
 
 建议去向：
-- `workspace/claweb/public/claweb/index.html`
-- `workspace/claweb/public/claweb/style.css`
-- `workspace/claweb/public/claweb/app.js`
+- `workspace/claweb/clients/browser/index.html`
+- `workspace/claweb/clients/browser/style.css`
+- `workspace/claweb/clients/browser/app.js`
 
 可回收原因：
 - 这是当前已真实跑通的通用 Web 入口
@@ -51,7 +51,7 @@
 ### B. 历史恢复与稳定排序的通用规则（高优先）
 来源：
 - `/root/.openclaw/<private-first-party-webchat>/server.js` 中 `loadClawebHistory`
-- `/root/.openclaw/<private-first-party-webchat>/public/claweb/app.js` 中历史恢复与去重配合逻辑
+- `/root/.openclaw/<private-first-party-webchat>/clients/browser/app.js` 中历史恢复与去重配合逻辑
 
 建议去向：
 - `workspace/claweb` 的服务端实现层（可能新增 HTTP/静态服务模块）
@@ -175,7 +175,7 @@
 ## 四、建议在 `claweb` 新增的目录层
 
 建议新增：
-- `public/claweb/`：浏览器前端静态资源
+- `clients/browser/`：浏览器前端静态资源
 - `examples/`：配置示例、登录映射示例、反代示例
 - `docs/`：架构、边界、MVP 说明、release notes
 

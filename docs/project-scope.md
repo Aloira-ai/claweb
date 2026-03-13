@@ -10,7 +10,7 @@
   - Client-facing channel contract
   - Reference access contract
   - Reference client integration contract
-  - Public browser reference client (`public/claweb/*`)
+  - Public browser reference client (`clients/browser/*`)
   - Login/history/ws access contract (`/claweb/login`, `/claweb/history`, `/claweb/ws`)
   - Protocol semantics (`hello -> ready -> message`, reply, history, media)
   - Regression expectations

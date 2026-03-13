@@ -10,9 +10,9 @@ OpenClaw client-facing channel plugin plus a browser reference client.
 
 - WebSocket channel plugin runtime for OpenClaw.
 - Client-facing channel semantics for session, reply, history, and media handoff.
-- Public browser reference client in `public/claweb/`.
+- Browser reference client in `clients/browser/`.
 - Example configs in `examples/` for OpenClaw and fixed identity mapping.
-- An optional "frontdoor" reference host in `examples/frontdoor/` (serves a client UI + implements /login /history /ws and proxies to upstream claweb channel).
+- An optional "frontdoor" reference host in `access/frontdoor/` (serves a client UI + implements /login /history /ws and proxies to upstream claweb channel).
 
 ## Current Scope (v0.2.0)
 
@@ -41,10 +41,10 @@ Still out of scope in this repo:
 
 - `index.ts`: plugin entry and channel registration.
 - `src/`: channel runtime implementation.
-- `public/claweb/`: browser reference client (`index.html`, `style.css`, `app.js`).
+- `clients/browser/`: browser reference client (`index.html`, `style.css`, `app.js`).
+- `access/frontdoor/`: reference access host for `/login`, `/history`, `/ws`.
 - `examples/openclaw.config.example.jsonc`: minimal OpenClaw plugin config.
 - `examples/claweb-login.example.json`: fixed identity mapping example (non-secret placeholders).
-- `examples/frontdoor/`: reference access host for `/login`, `/history`, `/ws`.
 
 ## Quick Start
 
@@ -52,7 +52,7 @@ Still out of scope in this repo:
 2. Static check: `npm run typecheck`
 3. Load plugin from your OpenClaw profile.
 4. Configure `channels.claweb` using [`examples/openclaw.config.example.jsonc`](./examples/openclaw.config.example.jsonc).
-5. Serve `public/claweb/` from your web server and wire these endpoints:
+5. Serve `clients/browser/` from your web server (or use the reference host in `access/frontdoor/`) and wire these endpoints:
    - `POST /claweb/login`
    - `GET /claweb/history`
    - `WS /claweb/ws`
@@ -61,7 +61,7 @@ Channel architecture layers: [`docs/channel-architecture.md`](./docs/channel-arc
 
 Channel contract (client-facing semantics): [`docs/channel-contract.md`](./docs/channel-contract.md).
 
-Frontend integration contract for the browser reference client is documented in [`docs/frontend-integration.md`](./docs/frontend-integration.md).
+Browser client integration contract for the browser reference client is documented in [`docs/browser-client-integration.md`](./docs/browser-client-integration.md).
 
 Project scope and boundaries: [`docs/project-scope.md`](./docs/project-scope.md).
 
