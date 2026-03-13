@@ -2,6 +2,11 @@
 
 [English](./README.md) | [简体中文](./README.zh-CN.md)
 
+![Release](https://img.shields.io/github/v/release/Aloira-ai/claweb?label=release)
+![License](https://img.shields.io/github/license/Aloira-ai/claweb)
+![Runtime](https://img.shields.io/badge/runtime-OpenClaw%20channel-7c3aed)
+![Client](https://img.shields.io/badge/client-browser%20reference-2563eb)
+
 **CLAWeb 是 OpenClaw 的一个面向客户端接入的 channel，并附带一个浏览器参考客户端。**
 
 它的核心思路是：**把路由、会话流、reply 流、记忆策略继续留在 OpenClaw 内部**，而对外提供一个可被 Web、App、PC 客户端等形态共同消费的 channel 表面。

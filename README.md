@@ -2,6 +2,11 @@
 
 [English](./README.md) | [简体中文](./README.zh-CN.md)
 
+![Release](https://img.shields.io/github/v/release/Aloira-ai/claweb?label=release)
+![License](https://img.shields.io/github/license/Aloira-ai/claweb)
+![Runtime](https://img.shields.io/badge/runtime-OpenClaw%20channel-7c3aed)
+![Client](https://img.shields.io/badge/client-browser%20reference-2563eb)
+
 **CLAWeb is an OpenClaw client-facing channel with a browser reference client.**
 
 It keeps routing, session flow, reply flow, and memory strategy inside OpenClaw while exposing a channel surface that can be consumed by web, app, desktop, or other clients.
