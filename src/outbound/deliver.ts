@@ -12,6 +12,20 @@ type WsEnvelope = {
   mediaDataUrl?: string;
 };
 
+type AggregateState = {
+  text: string;
+  mediaUrl?: string;
+  mediaType?: string;
+  mediaDataUrl?: string;
+  sent?: boolean;
+};
+
+type DeliverInfo = {
+  kind?: string;
+};
+
+const aggregateByMessageId = new Map<string, AggregateState>();
+
 type MediaCandidate = {
   ref: string;
   mediaType?: string;
@@ -212,7 +226,7 @@ async function resolveMedia(payload: unknown): Promise<{
 }
 
 export function createWsDeliver(ws: WebSocket, messageId: string) {
-  return async (payload: unknown) => {
+  return async (payload: unknown, info?: DeliverInfo) => {
     const text = extractText(payload);
     const candidates = collectMediaCandidates(payload);
     const media = await resolveMedia(payload);
@@ -226,7 +240,7 @@ export function createWsDeliver(ws: WebSocket, messageId: string) {
       const rawMediaDataUrl = payloadObj ? String(payloadObj.mediaDataUrl || "").trim() : "";
       const textPreview = text ? text.slice(0, 240).replace(/\s+/g, " ") : "";
       console.log(
-        `[claweb][deliver] messageId=${messageId} text=${text ? "yes" : "no"} textPreview=${JSON.stringify(textPreview)} candidates=${candidates.length} rawMediaUrl=${rawMediaUrl ? "yes" : "no"} rawMediaUrls=${rawMediaUrls.length} rawMediaDataUrl=${rawMediaDataUrl ? "yes" : "no"} mediaUrl=${media.mediaUrl ? "yes" : "no"} mediaDataUrl=${media.mediaDataUrl ? "yes" : "no"} mediaType=${media.mediaType || "none"} keys=${payloadKeys.join(",")}`,
+        `[claweb][deliver] messageId=${messageId} kind=${info?.kind || "unknown"} text=${text ? "yes" : "no"} textPreview=${JSON.stringify(textPreview)} candidates=${candidates.length} rawMediaUrl=${rawMediaUrl ? "yes" : "no"} rawMediaUrls=${rawMediaUrls.length} rawMediaDataUrl=${rawMediaDataUrl ? "yes" : "no"} mediaUrl=${media.mediaUrl ? "yes" : "no"} mediaDataUrl=${media.mediaDataUrl ? "yes" : "no"} mediaType=${media.mediaType || "none"} keys=${payloadKeys.join(",")}`,
       );
     } catch {
       // ignore logging failure
@@ -235,15 +249,40 @@ export function createWsDeliver(ws: WebSocket, messageId: string) {
       return;
     }
 
+    const state = aggregateByMessageId.get(messageId) ?? { text: "" };
+    if (text) {
+      state.text = state.text ? `${state.text}\n${text}`.trim() : text;
+    }
+    if (!state.mediaDataUrl && media.mediaDataUrl) {
+      state.mediaDataUrl = media.mediaDataUrl;
+      state.mediaType = media.mediaType;
+      state.mediaUrl = undefined;
+    } else if (!state.mediaDataUrl && !state.mediaUrl && media.mediaUrl) {
+      state.mediaUrl = media.mediaUrl;
+      state.mediaType = media.mediaType;
+    } else if (!state.mediaType && media.mediaType) {
+      state.mediaType = media.mediaType;
+    }
+    aggregateByMessageId.set(messageId, state);
+
+    if (info?.kind !== "final" || state.sent) {
+      return;
+    }
+
+    state.sent = true;
     const envelope: WsEnvelope = {
       type: "message",
       id: messageId,
       role: "assistant",
-      text,
-      mediaUrl: media.mediaUrl,
-      mediaType: media.mediaType,
-      mediaDataUrl: media.mediaDataUrl,
+      text: state.text,
+      mediaUrl: state.mediaUrl,
+      mediaType: state.mediaType,
+      mediaDataUrl: state.mediaDataUrl,
     };
-    ws.send(JSON.stringify(envelope));
+    try {
+      ws.send(JSON.stringify(envelope));
+    } finally {
+      aggregateByMessageId.delete(messageId);
+    }
   };
 }
