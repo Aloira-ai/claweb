@@ -45,6 +45,9 @@ const RECENT_LIMIT = Math.max(1, Math.min(1000, Number(ENV.CLAWEB_RECENT_LIMIT |
 const RECENT_TTL_DAYS = Math.max(1, Number(ENV.CLAWEB_RECENT_TTL_DAYS || 7) || 7);
 const RECENT_TTL_MS = RECENT_TTL_DAYS * 24 * 60 * 60 * 1000;
 
+const FILE_MAX_MB = Math.max(1, Number(ENV.CLAWEB_FILE_MAX_MB || 25) || 25);
+const FILE_MAX_BYTES = FILE_MAX_MB * 1024 * 1024;
+
 const UPSTREAM_WS = (ENV.CLAWEB_UPSTREAM_WS || "ws://127.0.0.1:18999").trim();
 const UPSTREAM_TOKEN = (
   ENV.CLAWEB_UPSTREAM_TOKEN ||
@@ -130,6 +133,147 @@ function safeFileSegment(s) {
     .trim()
     .replace(/[^a-zA-Z0-9._-]+/g, "_")
     .slice(0, 128);
+}
+
+function extLower(name) {
+  const ext = path.extname(String(name || "")).toLowerCase();
+  return ext.startsWith(".") ? ext : ext ? `.${ext}` : "";
+}
+
+function guessMimeFromExt(ext) {
+  const e = String(ext || "").toLowerCase();
+  // office-ish
+  if (e === ".pdf") return "application/pdf";
+  if (e === ".doc") return "application/msword";
+  if (e === ".docx") return "application/vnd.openxmlformats-officedocument.wordprocessingml.document";
+  if (e === ".xls") return "application/vnd.ms-excel";
+  if (e === ".xlsx") return "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet";
+  if (e === ".ppt") return "application/vnd.ms-powerpoint";
+  if (e === ".pptx") return "application/vnd.openxmlformats-officedocument.presentationml.presentation";
+  if (e === ".csv") return "text/csv";
+  if (e === ".txt") return "text/plain";
+  // common
+  if (e === ".png") return "image/png";
+  if (e === ".jpg" || e === ".jpeg") return "image/jpeg";
+  if (e === ".webp") return "image/webp";
+  if (e === ".gif") return "image/gif";
+  if (e === ".mp4") return "video/mp4";
+  if (e === ".webm") return "video/webm";
+  return "application/octet-stream";
+}
+
+function isAllowedOfficeUpload(name) {
+  const e = extLower(name);
+  return [".pdf", ".doc", ".docx", ".xls", ".xlsx", ".ppt", ".pptx", ".csv", ".txt"].includes(e);
+}
+
+async function readBodyBuffer(req, maxBytes) {
+  const chunks = [];
+  let total = 0;
+  for await (const chunk of req) {
+    const buf = Buffer.isBuffer(chunk) ? chunk : Buffer.from(chunk);
+    total += buf.length;
+    if (total > maxBytes) throw new Error("payload_too_large");
+    chunks.push(buf);
+  }
+  return Buffer.concat(chunks);
+}
+
+function parseMultipart(contentType) {
+  const m = String(contentType || "").match(/boundary=(?:(?:\"([^\"]+)\")|([^;]+))/i);
+  const boundary = (m?.[1] || m?.[2] || "").trim();
+  if (!boundary) return null;
+  return { boundary };
+}
+
+function parsePartHeaders(raw) {
+  const headers = {};
+  String(raw || "")
+    .split(/\r\n/)
+    .map((l) => l.trim())
+    .filter(Boolean)
+    .forEach((line) => {
+      const idx = line.indexOf(":");
+      if (idx <= 0) return;
+      const k = line.slice(0, idx).trim().toLowerCase();
+      const v = line.slice(idx + 1).trim();
+      headers[k] = v;
+    });
+  return headers;
+}
+
+function parseContentDisposition(v) {
+  const out = {};
+  const raw = String(v || "");
+  raw
+    .split(";")
+    .slice(1)
+    .map((s) => s.trim())
+    .filter(Boolean)
+    .forEach((pair) => {
+      const [k, ...rest] = pair.split("=");
+      const key = String(k || "").trim().toLowerCase();
+      let val = rest.join("=").trim();
+      if (val.startsWith("\"") && val.endsWith("\"")) val = val.slice(1, -1);
+      if (key) out[key] = val;
+    });
+  return out;
+}
+
+async function readMultipartFile(req, { fieldName = "file", maxBytes }) {
+  const ct = String(req.headers["content-type"] || "");
+  const mp = parseMultipart(ct);
+  if (!mp) throw new Error("invalid_multipart");
+
+  const body = await readBodyBuffer(req, maxBytes);
+  const boundary = Buffer.from(`--${mp.boundary}`);
+
+  let pos = 0;
+  // first boundary
+  const first = body.indexOf(boundary, pos);
+  if (first < 0) throw new Error("invalid_multipart");
+  pos = first;
+
+  while (pos >= 0) {
+    const start = body.indexOf(boundary, pos);
+    if (start < 0) break;
+    let partStart = start + boundary.length;
+
+    // final boundary
+    if (body.slice(partStart, partStart + 2).toString() === "--") break;
+
+    // skip CRLF
+    if (body.slice(partStart, partStart + 2).toString() === "\r\n") partStart += 2;
+
+    const headerEnd = body.indexOf(Buffer.from("\r\n\r\n"), partStart);
+    if (headerEnd < 0) break;
+    const headersRaw = body.slice(partStart, headerEnd).toString("utf8");
+    const headers = parsePartHeaders(headersRaw);
+
+    const cd = parseContentDisposition(headers["content-disposition"] || "");
+    const name = cd.name || "";
+    const filename = cd.filename || "";
+
+    const dataStart = headerEnd + 4;
+    const nextBoundary = body.indexOf(boundary, dataStart);
+    if (nextBoundary < 0) break;
+    // data ends with CRLF before boundary
+    let dataEnd = nextBoundary;
+    if (body.slice(dataEnd - 2, dataEnd).toString() === "\r\n") dataEnd -= 2;
+    const data = body.slice(dataStart, dataEnd);
+
+    if (name === fieldName) {
+      return {
+        filename: filename || "upload.bin",
+        contentType: String(headers["content-type"] || "").trim().toLowerCase() || null,
+        data,
+      };
+    }
+
+    pos = nextBoundary;
+  }
+
+  throw new Error("missing_file");
 }
 
 function saveDataUrlImage(dataUrl, originalName = "image.png") {
@@ -659,8 +803,46 @@ const server = http.createServer(async (req, res) => {
     try {
       const saved = saveDataUrlImage(dataUrl, filename || "image.png");
       const absUrl = buildAbsoluteMediaUrl(req.headers.host, saved.relUrl);
-      return json(res, 200, { ok: true, mediaUrl: absUrl, mediaType: saved.mime, relUrl: saved.relUrl });
+      return json(res, 200, { ok: true, mediaUrl: absUrl, mediaType: saved.mime, relUrl: saved.relUrl, mediaFilename: filename || null });
     } catch {
+      return json(res, 400, { ok: false, error: "upload_failed" });
+    }
+  }
+
+  if (req.method === "POST" && url.pathname === "/upload-file") {
+    const session = requireSession(req);
+    if (!session) return json(res, 401, { ok: false, error: "unauthorized" });
+
+    try {
+      const part = await readMultipartFile(req, { fieldName: "file", maxBytes: FILE_MAX_BYTES + 512 * 1024 });
+      const original = String(part.filename || "upload.bin");
+      if (!isAllowedOfficeUpload(original)) return json(res, 400, { ok: false, error: "unsupported_file_type" });
+
+      if (part.data.length > FILE_MAX_BYTES) return json(res, 413, { ok: false, error: "file_too_large" });
+
+      const safeBase = safeFileSegment(path.basename(original, path.extname(original))) || "file";
+      const ext = extLower(original) || ".bin";
+      const fileName = `${Date.now()}-${Math.random().toString(16).slice(2, 8)}-${safeBase}${ext}`;
+      const filePath = path.join(MEDIA_DIR, fileName);
+      await fsp.writeFile(filePath, part.data);
+
+      const mime = part.contentType && part.contentType !== "application/octet-stream" ? part.contentType : guessMimeFromExt(ext);
+      const relUrl = `/media/${fileName}`;
+      const absUrl = buildAbsoluteMediaUrl(req.headers.host, relUrl);
+      return json(res, 200, {
+        ok: true,
+        mediaUrl: absUrl,
+        relUrl,
+        mediaType: mime,
+        mediaFilename: original,
+        size: part.data.length,
+        maxMb: FILE_MAX_MB,
+      });
+    } catch (e) {
+      const msg = String(e?.message || e || "upload_failed");
+      if (msg.includes("payload_too_large")) return json(res, 413, { ok: false, error: "payload_too_large" });
+      if (msg.includes("missing_file")) return json(res, 400, { ok: false, error: "missing_file" });
+      if (msg.includes("invalid_multipart")) return json(res, 400, { ok: false, error: "invalid_multipart" });
       return json(res, 400, { ok: false, error: "upload_failed" });
     }
   }
@@ -672,11 +854,15 @@ const server = http.createServer(async (req, res) => {
     try {
       const buf = await fsp.readFile(filePath);
       const ext = path.extname(file).toLowerCase();
-      const mime = ext === ".png" ? "image/png" : ext === ".webp" ? "image/webp" : "image/jpeg";
+      const mime = guessMimeFromExt(ext);
+      const renderable = /^(image|video)\//i.test(mime);
+      const safeDownloadName = safeFileSegment(file) || "download";
+
       res.writeHead(200, {
         "content-type": mime,
         "content-length": String(buf.length),
-        "cache-control": "public, max-age=31536000, immutable",
+        "cache-control": renderable ? "public, max-age=31536000, immutable" : "private, max-age=0",
+        "content-disposition": renderable ? "inline" : `attachment; filename=\"${safeDownloadName}\"`,
       });
       res.end(buf);
     } catch {

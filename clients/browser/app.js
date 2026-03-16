@@ -68,6 +68,7 @@ const state = {
   uiBranding: { ...DEFAULT_UI },
   composingReplyTo: null,
   pendingImage: null, // { file, dataUrl, filename, mime, compressedDataUrl?, compressedMime?, stats?, compressionPromise?, compressing? }
+  pendingFile: null, // { file, filename, mime, size }
   reconnectTimer: null,
   reconnectAttempts: 0,
   manualDisconnect: false,
@@ -130,6 +131,16 @@ const el = {
   imageName: document.getElementById("image-name"),
   imageHint: document.getElementById("image-hint"),
   imageCancel: document.getElementById("image-cancel"),
+
+  fileInput: document.getElementById("file-input"),
+  fileBanner: document.getElementById("file-banner"),
+  fileName: document.getElementById("file-name"),
+  fileHint: document.getElementById("file-hint"),
+  fileCancel: document.getElementById("file-cancel"),
+
+  pickMenu: document.getElementById("pick-menu"),
+  pickMedia: document.getElementById("pick-media"),
+  pickFile: document.getElementById("pick-file"),
 };
 
 function setStatus(text, cls) {
@@ -311,6 +322,30 @@ function hideMoreMenu() {
   el.moreMenu.style.top = "";
 }
 
+function hidePickMenu() {
+  if (!el.pickMenu) return;
+  el.pickMenu.classList.add("hidden");
+  el.pickMenu.setAttribute("aria-hidden", "true");
+  el.pickMenu.style.left = "";
+  el.pickMenu.style.top = "";
+}
+
+function togglePickMenu() {
+  if (!el.pickMenu || !el.imageBtn) return;
+  const hidden = el.pickMenu.classList.contains("hidden");
+  if (!hidden) {
+    hidePickMenu();
+    return;
+  }
+  const rect = el.imageBtn.getBoundingClientRect();
+  const left = Math.max(8, Math.min(window.innerWidth - 180, rect.left));
+  const top = Math.max(8, Math.min(window.innerHeight - 180, rect.top - 104));
+  el.pickMenu.style.left = `${left}px`;
+  el.pickMenu.style.top = `${top}px`;
+  el.pickMenu.classList.remove("hidden");
+  el.pickMenu.setAttribute("aria-hidden", "false");
+}
+
 function toggleMoreMenu() {
   if (!el.moreMenu || !el.moreBtn) return;
   const hidden = el.moreMenu.classList.contains("hidden");
@@ -373,6 +408,7 @@ function addMessageRich({
   replyPreview = null,
   mediaUrl = null,
   mediaType = null,
+  mediaFilename = null,
 }) {
   const node = document.createElement("div");
   node.className = `msg msg-${role}`;
@@ -458,29 +494,57 @@ function addMessageRich({
   body.className = "msg-body";
   renderMessageText(body, text);
 
-  if (mediaUrl && isProbablyImageMedia(mediaUrl, mediaType)) {
+  if (mediaUrl && (isProbablyImageMedia(mediaUrl, mediaType) || isProbablyVideoMedia(mediaUrl, mediaType))) {
     const mediaWrap = document.createElement("div");
     mediaWrap.className = "msg-media";
 
-    const img = document.createElement("img");
-    img.src = String(mediaUrl);
-    img.alt = "image";
-    img.loading = "lazy";
-    mediaWrap.appendChild(img);
+    if (isProbablyImageMedia(mediaUrl, mediaType)) {
+      const img = document.createElement("img");
+      img.src = String(mediaUrl);
+      img.alt = "image";
+      img.loading = "lazy";
+      mediaWrap.appendChild(img);
+    } else {
+      const video = document.createElement("video");
+      video.src = String(mediaUrl);
+      video.controls = true;
+      video.preload = "metadata";
+      video.playsInline = true;
+      mediaWrap.appendChild(video);
+    }
+
+    const downloadRow = document.createElement("div");
+    downloadRow.className = "msg-media-actions";
+    const downloadLink = document.createElement("a");
+    downloadLink.className = "msg-media-download";
+    downloadLink.href = String(mediaUrl);
+    downloadLink.download = mediaFilename || inferMediaFilename(mediaUrl, mediaType);
+    downloadLink.target = "_blank";
+    downloadLink.rel = "noopener noreferrer";
+    downloadLink.textContent = isProbablyVideoMedia(mediaUrl, mediaType) ? "下载视频" : "下载图片";
+    downloadRow.appendChild(downloadLink);
+    mediaWrap.appendChild(downloadRow);
 
     body.appendChild(mediaWrap);
-  } else if (mediaUrl && isProbablyVideoMedia(mediaUrl, mediaType)) {
-    const mediaWrap = document.createElement("div");
-    mediaWrap.className = "msg-media";
+  } else if (mediaUrl) {
+    const wrap = document.createElement("div");
+    wrap.className = "msg-media";
 
-    const video = document.createElement("video");
-    video.src = String(mediaUrl);
-    video.controls = true;
-    video.preload = "metadata";
-    video.playsInline = true;
-    mediaWrap.appendChild(video);
+    const row = document.createElement("div");
+    row.className = "msg-media-actions";
 
-    body.appendChild(mediaWrap);
+    const link = document.createElement("a");
+    link.className = "msg-media-download";
+    link.href = String(mediaUrl);
+    link.download = mediaFilename || inferMediaFilename(mediaUrl, mediaType);
+    link.target = "_blank";
+    link.rel = "noopener noreferrer";
+    const label = mediaFilename || inferMediaFilename(mediaUrl, mediaType) || "附件";
+    link.textContent = `下载附件：${label}`;
+
+    row.appendChild(link);
+    wrap.appendChild(row);
+    body.appendChild(wrap);
   }
 
   node.appendChild(body);
@@ -566,6 +630,34 @@ function restoreEscapedMarkdown(text, escaped) {
   });
 }
 
+function appendTextWithAutoLinks(parent, text) {
+  const source = String(text || "");
+  if (!source) return;
+  const urlRe = /(https?:\/\/[^\s<]+[^\s<.,!?;:])/gi;
+  let lastIndex = 0;
+  let match;
+  while ((match = urlRe.exec(source))) {
+    if (match.index > lastIndex) {
+      parent.appendChild(document.createTextNode(source.slice(lastIndex, match.index)));
+    }
+    const href = String(match[1] || "");
+    if (isSafeLinkHref(href)) {
+      const link = document.createElement("a");
+      link.href = href;
+      link.target = "_blank";
+      link.rel = "noopener noreferrer nofollow";
+      link.textContent = href;
+      parent.appendChild(link);
+    } else {
+      parent.appendChild(document.createTextNode(href));
+    }
+    lastIndex = urlRe.lastIndex;
+  }
+  if (lastIndex < source.length) {
+    parent.appendChild(document.createTextNode(source.slice(lastIndex)));
+  }
+}
+
 function appendInlineMarkdown(parent, text) {
   const { protectedText, escaped } = protectEscapedMarkdown(text);
   const source = protectedText;
@@ -575,7 +667,7 @@ function appendInlineMarkdown(parent, text) {
 
   while ((match = tokenRe.exec(source))) {
     if (match.index > lastIndex) {
-      parent.appendChild(document.createTextNode(restoreEscapedMarkdown(source.slice(lastIndex, match.index), escaped)));
+      appendTextWithAutoLinks(parent, restoreEscapedMarkdown(source.slice(lastIndex, match.index), escaped));
     }
 
     if (match[1]) {
@@ -601,7 +693,7 @@ function appendInlineMarkdown(parent, text) {
         link.textContent = label;
         parent.appendChild(link);
       } else {
-        parent.appendChild(document.createTextNode(restoreEscapedMarkdown(match[0], escaped)));
+        appendTextWithAutoLinks(parent, restoreEscapedMarkdown(match[0], escaped));
       }
     } else if (match[10]) {
       parent.appendChild(document.createElement("br"));
@@ -611,7 +703,7 @@ function appendInlineMarkdown(parent, text) {
   }
 
   if (lastIndex < source.length) {
-    parent.appendChild(document.createTextNode(restoreEscapedMarkdown(source.slice(lastIndex), escaped)));
+    appendTextWithAutoLinks(parent, restoreEscapedMarkdown(source.slice(lastIndex), escaped));
   }
 }
 
@@ -909,6 +1001,38 @@ function isProbablyVideoMedia(mediaUrl, mediaType = "") {
   return guessMediaTypeFromUrl(mediaUrl).startsWith("video/");
 }
 
+function inferMediaFilename(mediaUrl, mediaType = "") {
+  const type = normalizeText(mediaType).toLowerCase() || guessMediaTypeFromUrl(mediaUrl);
+  const extMap = {
+    "image/png": "png",
+    "image/jpeg": "jpg",
+    "image/webp": "webp",
+    "image/gif": "gif",
+    "image/svg+xml": "svg",
+    "image/bmp": "bmp",
+    "image/avif": "avif",
+    "video/mp4": "mp4",
+    "video/webm": "webm",
+    "video/quicktime": "mov",
+    "video/x-m4v": "m4v",
+    "video/ogg": "ogv",
+  };
+
+  const raw = normalizeText(mediaUrl);
+  if (/^https?:\/\//i.test(raw)) {
+    try {
+      const url = new URL(raw);
+      const name = url.pathname.split("/").pop() || "";
+      if (name && name.includes(".")) return name;
+    } catch {
+      // ignore
+    }
+  }
+
+  const ext = extMap[type] || (type.startsWith("video/") ? "mp4" : "png");
+  return `${type.startsWith("video/") ? "video" : "image"}-${Date.now()}.${ext}`;
+}
+
 function extractInlineMediaRefs(text) {
   const source = String(text == null ? "" : text);
   const refs = [];
@@ -964,6 +1088,7 @@ function normalizeIncomingMessage(frame) {
 
   const rawText = normalizeText(frame.text);
   const frameMediaUrls = [
+    normalizeText(frame.mediaDataUrl),
     normalizeText(frame.mediaUrl),
     normalizeText(frame.media),
     ...normalizeStringArray(frame.mediaUrls),
@@ -1002,6 +1127,7 @@ function normalizeIncomingMessage(frame) {
     replyPreview: normalizeText(frame.replyPreview || frame.replySnippet || frame.parentPreview) || null,
     mediaUrl: mediaUrl || null,
     mediaType: mediaType || null,
+    mediaFilename: normalizeText(frame.mediaFilename || frame.filename || frame.name) || null,
   };
 }
 
@@ -1017,6 +1143,7 @@ function renderNormalizedMessage(message) {
     replyPreview: message.replyPreview,
     mediaUrl: message.mediaUrl,
     mediaType: message.mediaType,
+    mediaFilename: message.mediaFilename,
   });
 
   if (message.messageId) {
@@ -1066,9 +1193,11 @@ async function loadRecentHistory() {
         messageId: item?.messageId,
         replyTo: item?.replyTo,
         replyPreview: item?.replyPreview,
+        mediaDataUrl: item?.mediaDataUrl,
         mediaUrl: item?.mediaUrl,
         mediaUrls: item?.mediaUrls,
         mediaType: item?.mediaType,
+        mediaFilename: item?.mediaFilename,
         ts: item?.ts,
       });
       renderNormalizedMessage(normalized);
@@ -1547,6 +1676,9 @@ async function compressImageSource(opts = {}) {
 }
 
 function setPendingImage(file, dataUrl) {
+  // image + file are mutually exclusive for now
+  clearPendingFile();
+
   state.pendingImage = {
     file,
     dataUrl,
@@ -1639,6 +1771,75 @@ function clearPendingImage() {
   } catch {}
 }
 
+function setPendingFile(file) {
+  if (!file) return;
+  state.pendingFile = {
+    file,
+    filename: file?.name || "file",
+    mime: file?.type || "application/octet-stream",
+    size: Number(file?.size || 0) || 0,
+  };
+
+  // file + image are mutually exclusive for now (keep UX simple)
+  clearPendingImage();
+
+  if (el.fileName) el.fileName.textContent = state.pendingFile.filename;
+  if (el.fileHint) {
+    const kb = state.pendingFile.size ? Math.round(state.pendingFile.size / 1024) : null;
+    const mb = state.pendingFile.size ? (state.pendingFile.size / 1024 / 1024).toFixed(2) : null;
+    el.fileHint.textContent = state.pendingFile.size
+      ? `已选：${kb}KB（约 ${mb}MB），发送后可下载`
+      : "已选文件，发送后可下载";
+  }
+  el.fileBanner?.classList.remove("hidden");
+}
+
+function clearPendingFile() {
+  state.pendingFile = null;
+  el.fileBanner?.classList.add("hidden");
+  if (el.fileName) el.fileName.textContent = "";
+  if (el.fileHint) el.fileHint.textContent = "";
+  try {
+    if (el.fileInput) el.fileInput.value = "";
+  } catch {}
+}
+
+async function uploadPendingFile() {
+  if (!state.pendingFile) return null;
+
+  const form = new FormData();
+  form.append("file", state.pendingFile.file, state.pendingFile.filename);
+
+  const tryUpload = async (url) => {
+    const resp = await fetch(url, {
+      method: "POST",
+      headers: {
+        "x-claweb-token": state.session?.token || "",
+      },
+      body: form,
+    });
+    const data = await tryReadJson(resp);
+    return { resp, data };
+  };
+
+  // compat fallback for /claweb prefix
+  let out = await tryUpload("/upload-file");
+  if (!out.resp.ok && out.resp.status === 404) {
+    out = await tryUpload("/claweb/upload-file");
+  }
+
+  const { resp, data } = out;
+  if (!resp.ok || !data?.ok) {
+    throw new Error(data?.error || `upload_failed:${resp.status}`);
+  }
+
+  return {
+    mediaUrl: data.mediaUrl || data.relUrl,
+    mediaType: data.mediaType || state.pendingFile.mime || "application/octet-stream",
+    mediaFilename: data.mediaFilename || state.pendingFile.filename || null,
+  };
+}
+
 async function uploadPendingImage() {
   if (!state.pendingImage) return null;
 
@@ -1681,7 +1882,7 @@ async function uploadPendingImage() {
 
 async function sendCurrentMessage() {
   const text = el.input.value.trim();
-  if (!text && !state.pendingImage) return;
+  if (!text && !state.pendingImage && !state.pendingFile) return;
   if (!state.ws || !state.ready) {
     addMessage("system", "Not connected yet. Try again in a moment.");
     return;
@@ -1694,9 +1895,12 @@ async function sendCurrentMessage() {
   try {
     if (state.pendingImage) {
       uploadResult = await uploadPendingImage();
+    } else if (state.pendingFile) {
+      uploadResult = await uploadPendingFile();
     }
   } catch (e) {
-    addMessage("system", `Image upload failed: ${String(e?.message || e)}`);
+    const kind = state.pendingFile ? "File" : "Image";
+    addMessage("system", `${kind} upload failed: ${String(e?.message || e)}`);
     return;
   }
 
@@ -1710,6 +1914,7 @@ async function sendCurrentMessage() {
       : null,
     mediaUrl: uploadResult?.mediaUrl || null,
     mediaType: uploadResult?.mediaType || null,
+    mediaFilename: uploadResult?.mediaFilename || null,
     ts,
   };
 
@@ -1729,6 +1934,7 @@ async function sendCurrentMessage() {
     replyPreview: localMessage.replyPreview || undefined,
     mediaUrl: uploadResult?.mediaUrl || undefined,
     mediaType: uploadResult?.mediaType || undefined,
+    mediaFilename: uploadResult?.mediaFilename || undefined,
     timestamp: ts,
   };
 
@@ -1737,6 +1943,7 @@ async function sendCurrentMessage() {
     el.input.value = "";
     autoResizeInput();
     clearPendingImage();
+    clearPendingFile();
 
     // clear reply mode after send
     state.composingReplyTo = null;
@@ -1759,11 +1966,15 @@ function logout() {
   state.messageIndex.clear();
   state.composingReplyTo = null;
   state.pendingImage = null;
+  state.pendingFile = null;
   el.replyBanner?.classList.add("hidden");
   if (el.replyBannerText) el.replyBannerText.textContent = "";
   el.imageBanner?.classList.add("hidden");
   if (el.imagePreview) el.imagePreview.src = "";
   if (el.imageName) el.imageName.textContent = "";
+  el.fileBanner?.classList.add("hidden");
+  if (el.fileName) el.fileName.textContent = "";
+  if (el.fileHint) el.fileHint.textContent = "";
   hideMoreMenu();
   hideSearchModal();
   hideAppearanceModal();
@@ -1950,14 +2161,44 @@ if (window.visualViewport) {
   window.visualViewport.addEventListener("scroll", syncViewportHeight, { passive: true });
 }
 
-// image pick
-if (el.imageBtn && el.imageInput) {
-  el.imageBtn.addEventListener("click", () => el.imageInput.click());
+// picker menu (media/file)
+if (el.imageBtn) {
+  el.imageBtn.addEventListener("click", () => {
+    hideMoreMenu();
+    togglePickMenu();
+  });
+}
+
+if (el.pickMedia && el.imageInput) {
+  el.pickMedia.addEventListener("click", () => {
+    hidePickMenu();
+    el.imageInput.click();
+  });
+}
+
+if (el.pickFile && el.fileInput) {
+  el.pickFile.addEventListener("click", () => {
+    hidePickMenu();
+    el.fileInput.click();
+  });
+}
+
+// media pick (currently image upload pipeline)
+if (el.imageInput) {
   el.imageInput.addEventListener("change", async (e) => {
     const file = e.target?.files?.[0];
     if (!file || !String(file.type || "").startsWith("image/")) return;
     const dataUrl = await readFileAsDataURL(file);
     setPendingImage(file, dataUrl);
+  });
+}
+
+// file pick
+if (el.fileInput) {
+  el.fileInput.addEventListener("change", (e) => {
+    const file = e.target?.files?.[0];
+    if (!file) return;
+    setPendingFile(file);
   });
 }
 
@@ -1977,6 +2218,9 @@ el.input.addEventListener("paste", async (e) => {
 
 if (el.imageCancel) {
   el.imageCancel.addEventListener("click", clearPendingImage);
+}
+if (el.fileCancel) {
+  el.fileCancel.addEventListener("click", clearPendingFile);
 }
 el.disconnectBtn.addEventListener("click", () => {
   hideMoreMenu();
@@ -2109,6 +2353,7 @@ if (el.moreBtn) {
   el.moreBtn.addEventListener("click", (e) => {
     e.preventDefault();
     e.stopPropagation();
+    hidePickMenu();
     toggleMoreMenu();
   });
 }
@@ -2243,5 +2488,21 @@ document.addEventListener("keydown", (e) => {
     return;
   }
   hideMoreMenu();
+  hidePickMenu();
   hideMsgMenu();
+});
+
+document.addEventListener("click", (e) => {
+  const target = e.target;
+
+  // Click outside closes floating menus.
+  if (el.moreMenu && !el.moreMenu.classList.contains("hidden")) {
+    if (!(target && (el.moreMenu.contains(target) || el.moreBtn?.contains(target)))) hideMoreMenu();
+  }
+  if (el.pickMenu && !el.pickMenu.classList.contains("hidden")) {
+    if (!(target && (el.pickMenu.contains(target) || el.imageBtn?.contains(target)))) hidePickMenu();
+  }
+  if (el.msgMenu && !el.msgMenu.classList.contains("hidden")) {
+    if (!(target && el.msgMenu.contains(target))) hideMsgMenu();
+  }
 });

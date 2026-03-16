@@ -504,6 +504,29 @@ button {
   background: white;
 }
 
+.msg-media-actions {
+  margin-top: 8px;
+  display: flex;
+  justify-content: flex-end;
+}
+
+.msg-media-download {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 12px;
+  color: var(--link);
+  text-decoration: none;
+  padding: 6px 10px;
+  border-radius: 999px;
+  background: rgba(142, 140, 216, 0.08);
+  border: 1px solid rgba(142, 140, 216, 0.18);
+}
+
+.msg-media-download:hover {
+  background: rgba(142, 140, 216, 0.14);
+}
+
 .meta {
   margin-top: 6px;
   font-size: 11px;
@@ -604,9 +627,19 @@ button {
 
 .composer-row {
   display: grid;
-  grid-template-columns: auto minmax(0, 1fr) auto;
+  grid-template-columns: auto auto minmax(0, 1fr) auto;
   gap: 10px;
   align-items: end;
+}
+
+.file-preview {
+  width: 52px;
+  height: 52px;
+  border-radius: 12px;
+  background: #eef2f7;
+  display: grid;
+  place-items: center;
+  font-size: 22px;
 }
 
 #message-input {
@@ -898,6 +931,12 @@ button:disabled {
   .image-preview {
     width: 44px;
     height: 44px;
+  }
+
+  .file-preview {
+    width: 44px;
+    height: 44px;
+    font-size: 20px;
   }
 
   .modal {

@@ -64,9 +64,19 @@
           <button id="image-cancel" type="button" class="mini-btn" aria-label="移除图片">✕</button>
         </div>
 
+        <div id="file-banner" class="image-banner hidden" aria-live="polite">
+          <div class="file-preview">📎</div>
+          <div class="image-banner-meta">
+            <div id="file-name" class="image-name">已选文件</div>
+            <div id="file-hint" class="image-hint">选择文件后发送（最大 25MB）</div>
+          </div>
+          <button id="file-cancel" type="button" class="mini-btn" aria-label="移除文件">✕</button>
+        </div>
+
         <div class="composer-row">
-          <button id="image-btn" type="button" class="icon-btn soft" aria-label="选择图片">＋</button>
+          <button id="image-btn" type="button" class="icon-btn soft" aria-label="添加">＋</button>
           <input id="image-input" type="file" accept="image/*" class="hidden" />
+          <input id="file-input" type="file" accept=".pdf,.doc,.docx,.xls,.xlsx,.ppt,.pptx,.csv,.txt" class="hidden" />
           <textarea id="message-input" rows="1" placeholder="说点什么…"></textarea>
           <button id="send-btn" type="button" class="send-btn" aria-label="发送">➤</button>
         </div>
@@ -82,6 +92,11 @@
         <button id="threads-action" type="button" class="ghost" role="menuitem">切换会话</button>
         <button id="disconnect-btn" type="button" class="ghost" role="menuitem">断开连接</button>
         <button id="logout-btn" type="button" class="ghost" role="menuitem">退出登录</button>
+      </div>
+
+      <div id="pick-menu" class="floating-menu hidden" role="menu" aria-hidden="true">
+        <button id="pick-media" type="button" class="ghost" role="menuitem">媒体</button>
+        <button id="pick-file" type="button" class="ghost" role="menuitem">文件</button>
       </div>
 
       <section id="search-modal" class="modal hidden" aria-hidden="true">
@@ -166,6 +181,6 @@
       avatarMode: "emoji"
     };
   </script>
-  <script src="/claweb/app.js?v=20260313-rt7"></script>
+  <script src="/claweb/app.js?v=20260314-2340"></script>
 </body>
 </html>
