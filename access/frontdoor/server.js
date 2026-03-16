@@ -55,6 +55,10 @@ const UPSTREAM_TOKEN = (
     ? fs.readFileSync(ENV.CLAWEB_UPSTREAM_TOKEN_FILE, "utf8")
     : "")
 ).trim();
+const UI_TITLE = String(ENV.CLAWEB_UI_TITLE || "").trim();
+const UI_CHARACTER_NAME = String(ENV.CLAWEB_UI_CHARACTER_NAME || ENV.CLAWEB_ASSISTANT_NAME || "").trim();
+const UI_AVATAR = String(ENV.CLAWEB_UI_AVATAR || "").trim();
+const UI_AVATAR_MODE = String(ENV.CLAWEB_UI_AVATAR_MODE || "").trim();
 
 if (!UPSTREAM_TOKEN) {
   console.warn(
@@ -772,6 +776,24 @@ function contentTypeFor(filePath) {
   return "application/octet-stream";
 }
 
+function buildUiConfig() {
+  return {
+    title: UI_TITLE || undefined,
+    characterName: UI_CHARACTER_NAME || undefined,
+    avatar: UI_AVATAR || undefined,
+    avatarMode: UI_AVATAR_MODE || undefined,
+  };
+}
+
+function injectUiConfig(html) {
+  const marker = /window\.CLAWEB_UI\s*=\s*\{[\s\S]*?\};/;
+  const uiConfigJson = JSON.stringify(buildUiConfig(), null, 2);
+  if (marker.test(html)) {
+    return html.replace(marker, `window.CLAWEB_UI = Object.assign({}, window.CLAWEB_UI || {}, ${uiConfigJson});`);
+  }
+  return html;
+}
+
 async function serveStatic(req, res) {
   const url = new URL(req.url || "/", `http://${req.headers.host || "localhost"}`);
   let pathname = decodeURIComponent(url.pathname);
@@ -798,12 +820,15 @@ async function serveStatic(req, res) {
       return;
     }
     const data = await fsp.readFile(resolved);
+    const body = path.extname(resolved).toLowerCase() === ".html"
+      ? Buffer.from(injectUiConfig(String(data)), "utf8")
+      : data;
     res.writeHead(200, {
       "content-type": contentTypeFor(resolved),
-      "content-length": String(data.length),
+      "content-length": String(body.length),
       "cache-control": "public, max-age=0",
     });
-    res.end(data);
+    res.end(body);
   } catch {
     notFound(res);
   }
