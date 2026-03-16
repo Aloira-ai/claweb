@@ -54,6 +54,20 @@ async function tryDownloadMediaToFile(params: {
   return { filePath, mediaType: inferredType };
 }
 
+function buildBodyForAgent(text: string): string {
+  const base = String(text || "");
+  const channelNote = [
+    "[CLAWeb channel note]",
+    "This channel supports OpenClaw-standard file/media attachments.",
+    "To send an attachment, use one of the standard forms:",
+    "- inline line: MEDIA:<path-or-url>",
+    "- structured fields: mediaUrl/mediaUrls/path/filePath/mediaPath/mediaPaths",
+    "Do not claim that CLAWeb cannot send attachments.",
+    "Non-image/video files will be shown to the user as downloadable attachments.",
+  ].join("\n");
+  return `${base}\n\n${channelNote}`.trim();
+}
+
 export async function buildInboundCtx(input: BuildInboundCtxInput) {
   const chatType = input.roomId ? "group" : "direct";
   const peerLabel = input.roomId ? `room:${input.roomId}` : `user:${input.userId}`;
@@ -84,6 +98,7 @@ export async function buildInboundCtx(input: BuildInboundCtxInput) {
 
   return input.runtime.channel.reply.finalizeInboundContext({
     Body: input.text,
+    BodyForAgent: buildBodyForAgent(input.text),
     RawBody: input.text,
     CommandBody: input.text,
 

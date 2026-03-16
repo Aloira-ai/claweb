@@ -354,12 +354,16 @@ function toggleMoreMenu() {
     return;
   }
   const rect = el.moreBtn.getBoundingClientRect();
-  const left = Math.max(8, Math.min(window.innerWidth - 180, rect.right - 164));
-  const top = Math.min(window.innerHeight - 200, rect.bottom + 8);
-  el.moreMenu.style.left = `${left}px`;
-  el.moreMenu.style.top = `${top}px`;
   el.moreMenu.classList.remove("hidden");
   el.moreMenu.setAttribute("aria-hidden", "false");
+  el.moreMenu.style.visibility = "hidden";
+  const menuWidth = Math.max(154, el.moreMenu.offsetWidth || 180);
+  const menuHeight = Math.max(120, el.moreMenu.offsetHeight || 180);
+  const left = Math.max(8, Math.min(window.innerWidth - menuWidth - 8, rect.right - menuWidth));
+  const top = Math.max(8, Math.min(window.innerHeight - menuHeight - 8, rect.bottom + 8));
+  el.moreMenu.style.left = `${left}px`;
+  el.moreMenu.style.top = `${top}px`;
+  el.moreMenu.style.visibility = "";
 }
 
 function showSearchModal() {
@@ -969,11 +973,20 @@ function normalizeStringArray(value) {
 function guessMediaTypeFromUrl(url) {
   const raw = normalizeText(url);
   if (!raw) return "";
-  if (/^data:(image|video)\//i.test(raw)) {
-    const m = raw.match(/^data:((?:image|video)\/[^;,]+)[;,]/i);
+  if (/^data:/i.test(raw)) {
+    const m = raw.match(/^data:([^;,]+)[;,]/i);
     return normalizeText(m?.[1] || "");
   }
   const clean = raw.split("?")[0].split("#")[0].toLowerCase();
+  if (clean.endsWith(".pdf")) return "application/pdf";
+  if (clean.endsWith(".doc")) return "application/msword";
+  if (clean.endsWith(".docx")) return "application/vnd.openxmlformats-officedocument.wordprocessingml.document";
+  if (clean.endsWith(".xls")) return "application/vnd.ms-excel";
+  if (clean.endsWith(".xlsx")) return "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet";
+  if (clean.endsWith(".ppt")) return "application/vnd.ms-powerpoint";
+  if (clean.endsWith(".pptx")) return "application/vnd.openxmlformats-officedocument.presentationml.presentation";
+  if (clean.endsWith(".csv")) return "text/csv";
+  if (clean.endsWith(".txt")) return "text/plain";
   if (clean.endsWith(".png")) return "image/png";
   if (clean.endsWith(".jpg") || clean.endsWith(".jpeg")) return "image/jpeg";
   if (clean.endsWith(".gif")) return "image/gif";
@@ -1004,6 +1017,15 @@ function isProbablyVideoMedia(mediaUrl, mediaType = "") {
 function inferMediaFilename(mediaUrl, mediaType = "") {
   const type = normalizeText(mediaType).toLowerCase() || guessMediaTypeFromUrl(mediaUrl);
   const extMap = {
+    "application/pdf": "pdf",
+    "application/msword": "doc",
+    "application/vnd.openxmlformats-officedocument.wordprocessingml.document": "docx",
+    "application/vnd.ms-excel": "xls",
+    "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet": "xlsx",
+    "application/vnd.ms-powerpoint": "ppt",
+    "application/vnd.openxmlformats-officedocument.presentationml.presentation": "pptx",
+    "text/csv": "csv",
+    "text/plain": "txt",
     "image/png": "png",
     "image/jpeg": "jpg",
     "image/webp": "webp",
@@ -1029,16 +1051,22 @@ function inferMediaFilename(mediaUrl, mediaType = "") {
     }
   }
 
-  const ext = extMap[type] || (type.startsWith("video/") ? "mp4" : "png");
-  return `${type.startsWith("video/") ? "video" : "image"}-${Date.now()}.${ext}`;
+  const ext = extMap[type]
+    || (type.startsWith("video/") ? "mp4" : type.startsWith("image/") ? "png" : "bin");
+  const prefix = type.startsWith("video/")
+    ? "video"
+    : type.startsWith("image/")
+      ? "image"
+      : "attachment";
+  return `${prefix}-${Date.now()}.${ext}`;
 }
 
 function extractInlineMediaRefs(text) {
   const source = String(text == null ? "" : text);
   const refs = [];
-  const mediaMatches = source.match(/MEDIA\s*:\s*(data:(?:image|video)\/[^\s"')]+|https?:\/\/[^\s"')]+)/gi) || [];
-  for (const item of mediaMatches) {
-    const ref = normalizeText(item.replace(/^MEDIA\s*:\s*/i, ""));
+  for (const line of source.split(/\r?\n/)) {
+    const match = line.match(/^\s*MEDIA\s*:\s*(.+?)\s*$/i);
+    const ref = normalizeText(match?.[1] || "");
     if (ref) refs.push(ref);
   }
   return [...new Set(refs.filter(Boolean))];
@@ -1048,7 +1076,9 @@ function stripInlineMediaText(text) {
   const source = String(text == null ? "" : text).trim();
   if (!source) return "";
   return source
-    .replace(/MEDIA\s*:\s*(data:(?:image|video)\/[^\s"')]+|https?:\/\/[^\s"')]+)/gi, "")
+    .split(/\r?\n/)
+    .filter((line) => !/^\s*MEDIA\s*:/i.test(line))
+    .join("\n")
     .trim();
 }
 
@@ -1095,8 +1125,7 @@ function normalizeIncomingMessage(frame) {
     ...normalizeStringArray(frame.media),
   ].filter(Boolean);
   const inlineMediaUrls = extractInlineMediaRefs(rawText);
-  const inlineRenderableUrls = inlineMediaUrls.filter((item) => !!guessMediaTypeFromUrl(item));
-  const mediaUrl = frameMediaUrls[0] || inlineRenderableUrls[0] || "";
+  const mediaUrl = frameMediaUrls[0] || inlineMediaUrls[0] || "";
   const mediaType = normalizeText(frame.mediaType || frame.mime || frame.mediaMime || guessMediaTypeFromUrl(mediaUrl));
   const text = mediaUrl ? stripInlineMediaText(rawText) : rawText;
 
@@ -2136,7 +2165,10 @@ function autoResizeInput() {
 el.sendBtn.addEventListener("click", sendCurrentMessage);
 el.input.addEventListener("input", autoResizeInput);
 el.input.addEventListener("keydown", (event) => {
-  if (event.key === "Enter" && !event.shiftKey) {
+  if (event.key !== "Enter") return;
+
+  // 手机输入法/普通回车：换行；桌面端用 Ctrl/Cmd+Enter 发送
+  if (event.ctrlKey || event.metaKey) {
     event.preventDefault();
     sendCurrentMessage();
   }
@@ -2163,24 +2195,36 @@ if (window.visualViewport) {
 
 // picker menu (media/file)
 if (el.imageBtn) {
-  el.imageBtn.addEventListener("click", () => {
+  const onOpenPickMenu = (e) => {
+    e?.preventDefault?.();
+    e?.stopPropagation?.();
     hideMoreMenu();
     togglePickMenu();
-  });
+  };
+  el.imageBtn.addEventListener("click", onOpenPickMenu);
+  el.imageBtn.addEventListener("touchstart", onOpenPickMenu, { passive: false });
 }
 
 if (el.pickMedia && el.imageInput) {
-  el.pickMedia.addEventListener("click", () => {
+  const onPickMedia = (e) => {
+    e?.preventDefault?.();
+    e?.stopPropagation?.();
     hidePickMenu();
     el.imageInput.click();
-  });
+  };
+  el.pickMedia.addEventListener("click", onPickMedia);
+  el.pickMedia.addEventListener("touchstart", onPickMedia, { passive: false });
 }
 
 if (el.pickFile && el.fileInput) {
-  el.pickFile.addEventListener("click", () => {
+  const onPickFile = (e) => {
+    e?.preventDefault?.();
+    e?.stopPropagation?.();
     hidePickMenu();
     el.fileInput.click();
-  });
+  };
+  el.pickFile.addEventListener("click", onPickFile);
+  el.pickFile.addEventListener("touchstart", onPickFile, { passive: false });
 }
 
 // media pick (currently image upload pipeline)

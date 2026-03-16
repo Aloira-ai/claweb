@@ -157,9 +157,41 @@ function guessMimeFromExt(ext) {
   if (e === ".jpg" || e === ".jpeg") return "image/jpeg";
   if (e === ".webp") return "image/webp";
   if (e === ".gif") return "image/gif";
+  if (e === ".svg") return "image/svg+xml";
+  if (e === ".bmp") return "image/bmp";
+  if (e === ".avif") return "image/avif";
   if (e === ".mp4") return "video/mp4";
   if (e === ".webm") return "video/webm";
+  if (e === ".mov") return "video/quicktime";
+  if (e === ".m4v") return "video/x-m4v";
+  if (e === ".ogv") return "video/ogg";
   return "application/octet-stream";
+}
+
+function guessExtFromMime(mime) {
+  const m = String(mime || "").trim().toLowerCase();
+  if (m === "application/pdf") return ".pdf";
+  if (m === "application/msword") return ".doc";
+  if (m === "application/vnd.openxmlformats-officedocument.wordprocessingml.document") return ".docx";
+  if (m === "application/vnd.ms-excel") return ".xls";
+  if (m === "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet") return ".xlsx";
+  if (m === "application/vnd.ms-powerpoint") return ".ppt";
+  if (m === "application/vnd.openxmlformats-officedocument.presentationml.presentation") return ".pptx";
+  if (m === "text/csv") return ".csv";
+  if (m === "text/plain") return ".txt";
+  if (m === "image/png") return ".png";
+  if (m === "image/jpeg") return ".jpg";
+  if (m === "image/webp") return ".webp";
+  if (m === "image/gif") return ".gif";
+  if (m === "image/svg+xml") return ".svg";
+  if (m === "image/bmp") return ".bmp";
+  if (m === "image/avif") return ".avif";
+  if (m === "video/mp4") return ".mp4";
+  if (m === "video/webm") return ".webm";
+  if (m === "video/quicktime") return ".mov";
+  if (m === "video/x-m4v") return ".m4v";
+  if (m === "video/ogg") return ".ogv";
+  return "";
 }
 
 function isAllowedOfficeUpload(name) {
@@ -276,22 +308,23 @@ async function readMultipartFile(req, { fieldName = "file", maxBytes }) {
   throw new Error("missing_file");
 }
 
-function saveDataUrlImage(dataUrl, originalName = "image.png") {
-  const match = String(dataUrl || "").match(/^data:(image\/(png|jpeg|jpg|webp|gif));base64,(.+)$/i);
-  if (!match) throw new Error("invalid_image_data");
-  const mime = match[1].toLowerCase();
-  const ext = mime.includes("png")
-    ? ".png"
-    : mime.includes("webp")
-      ? ".webp"
-      : mime.includes("gif")
-        ? ".gif"
-        : ".jpg";
-  const safeBase = safeFileSegment(path.basename(originalName, path.extname(originalName))) || "image";
+function saveDataUrlFile(dataUrl, originalName = "attachment.bin") {
+  const match = String(dataUrl || "").match(/^data:([^;,]+);base64,(.+)$/i);
+  if (!match) throw new Error("invalid_media_data");
+  const mime = String(match[1] || "application/octet-stream").toLowerCase();
+  const preferredExt = extLower(originalName);
+  const ext = preferredExt || guessExtFromMime(mime) || ".bin";
+  const safeBase = safeFileSegment(path.basename(originalName, path.extname(originalName))) || "attachment";
   const fileName = `${Date.now()}-${Math.random().toString(16).slice(2, 8)}-${safeBase}${ext}`;
   const filePath = path.join(MEDIA_DIR, fileName);
-  fs.writeFileSync(filePath, Buffer.from(match[3], "base64"));
-  return { filePath, mime, relUrl: `/media/${fileName}` };
+  fs.writeFileSync(filePath, Buffer.from(match[2], "base64"));
+  return { filePath, mime, relUrl: `/media/${fileName}`, fileName };
+}
+
+function saveDataUrlImage(dataUrl, originalName = "image.png") {
+  const saved = saveDataUrlFile(dataUrl, originalName);
+  if (!/^image\//i.test(saved.mime)) throw new Error("invalid_image_data");
+  return saved;
 }
 
 function buildAbsoluteMediaUrl(host, relUrl) {
@@ -299,32 +332,55 @@ function buildAbsoluteMediaUrl(host, relUrl) {
   return safeHost ? `https://${safeHost}${relUrl}` : relUrl;
 }
 
-function guessRenderableMediaType(ref) {
+function guessMediaTypeFromRef(ref) {
   const raw = String(ref || "").trim();
   if (!raw) return "";
   const dataMatch = raw.match(/^data:([^;,]+)[;,]/i);
   if (dataMatch?.[1]) return String(dataMatch[1]).trim().toLowerCase();
-  const clean = raw.split("?")[0].split("#")[0].toLowerCase();
-  if (clean.endsWith(".png")) return "image/png";
-  if (clean.endsWith(".jpg") || clean.endsWith(".jpeg")) return "image/jpeg";
-  if (clean.endsWith(".gif")) return "image/gif";
-  if (clean.endsWith(".webp")) return "image/webp";
-  if (clean.endsWith(".svg")) return "image/svg+xml";
-  if (clean.endsWith(".bmp")) return "image/bmp";
-  if (clean.endsWith(".avif")) return "image/avif";
-  if (clean.endsWith(".mp4")) return "video/mp4";
-  if (clean.endsWith(".webm")) return "video/webm";
-  if (clean.endsWith(".mov")) return "video/quicktime";
-  if (clean.endsWith(".m4v")) return "video/x-m4v";
-  if (clean.endsWith(".ogv")) return "video/ogg";
-  return "";
+  const sourcePath = raw.startsWith("file://") ? new URL(raw).pathname : raw;
+  return guessMimeFromExt(extLower(sourcePath)) || "";
+}
+
+function guessRenderableMediaType(ref) {
+  const mediaType = guessMediaTypeFromRef(ref);
+  return /^(image|video)\//i.test(mediaType) ? mediaType : "";
 }
 
 function isRenderableMediaType(mediaType) {
   return /^(image|video)\//i.test(String(mediaType || "").trim());
 }
 
-async function probeRenderableMediaType(ref) {
+function guessFilenameFromRef(ref) {
+  const raw = String(ref || "").trim();
+  if (!raw || raw.startsWith("data:")) return "";
+  try {
+    if (/^https?:\/\//i.test(raw)) {
+      const url = new URL(raw);
+      return path.basename(url.pathname || "") || "";
+    }
+    if (raw.startsWith("file://")) {
+      return path.basename(new URL(raw).pathname || "") || "";
+    }
+  } catch {
+    return "";
+  }
+  return path.basename(raw) || "";
+}
+
+function extractMediaRefsFromText(text) {
+  const refs = [];
+  const seen = new Set();
+  for (const line of String(text || "").split(/\r?\n/)) {
+    const match = line.match(/^\s*MEDIA\s*:\s*(.+?)\s*$/i);
+    const ref = String(match?.[1] || "").trim();
+    if (!ref || seen.has(ref)) continue;
+    seen.add(ref);
+    refs.push(ref);
+  }
+  return refs;
+}
+
+async function probeMediaType(ref) {
   const raw = String(ref || "").trim();
   if (!/^https?:\/\//i.test(raw)) return "";
 
@@ -338,8 +394,7 @@ async function probeRenderableMediaType(ref) {
         signal: controller.signal,
         headers: method === "GET" ? { Range: "bytes=0-0" } : undefined,
       });
-      const mediaType = String(response.headers.get("content-type") || "").trim().toLowerCase();
-      return isRenderableMediaType(mediaType) ? mediaType : "";
+      return String(response.headers.get("content-type") || "").trim().toLowerCase();
     } catch {
       return "";
     } finally {
@@ -348,6 +403,53 @@ async function probeRenderableMediaType(ref) {
   };
 
   return (await tryFetch("HEAD")) || (await tryFetch("GET"));
+}
+
+async function saveLocalFileToMedia(ref, preferredName = "") {
+  const raw = String(ref || "").trim();
+  if (!raw || /^https?:\/\//i.test(raw) || /^data:/i.test(raw)) return null;
+  const sourcePath = raw.startsWith("file://") ? new URL(raw).pathname : path.resolve(raw);
+  const sourceStat = await fsp.stat(sourcePath);
+  if (!sourceStat.isFile()) throw new Error("missing_file");
+  const originalName = preferredName || path.basename(sourcePath) || "attachment.bin";
+  const ext = extLower(originalName) || extLower(sourcePath);
+  const mime = guessMimeFromExt(ext);
+  const safeBase = safeFileSegment(path.basename(originalName, path.extname(originalName))) || "attachment";
+  const finalName = `${Date.now()}-${Math.random().toString(16).slice(2, 8)}-${safeBase}${ext || guessExtFromMime(mime) || ".bin"}`;
+  const filePath = path.join(MEDIA_DIR, finalName);
+  await fsp.copyFile(sourcePath, filePath);
+  return { filePath, mime, relUrl: `/media/${finalName}`, fileName: originalName };
+}
+
+async function resolveAssistantMediaRef(ref, host, preferredName = "", hintedType = "") {
+  const raw = String(ref || "").trim();
+  if (!raw) return { mediaUrl: "", mediaType: "", mediaFilename: "" };
+
+  if (/^data:/i.test(raw)) {
+    const saved = saveDataUrlFile(raw, preferredName || guessFilenameFromRef(raw) || "attachment.bin");
+    return {
+      mediaUrl: buildAbsoluteMediaUrl(host, saved.relUrl),
+      mediaType: saved.mime,
+      mediaFilename: preferredName || saved.fileName || "",
+    };
+  }
+
+  if (/^https?:\/\//i.test(raw)) {
+    return {
+      mediaUrl: raw,
+      mediaType: hintedType || guessMediaTypeFromRef(raw) || (await probeMediaType(raw)) || "",
+      mediaFilename: preferredName || guessFilenameFromRef(raw) || "",
+    };
+  }
+
+  const saved = await saveLocalFileToMedia(raw, preferredName);
+  return saved
+    ? {
+        mediaUrl: buildAbsoluteMediaUrl(host, saved.relUrl),
+        mediaType: hintedType || saved.mime || "",
+        mediaFilename: preferredName || saved.fileName || "",
+      }
+    : { mediaUrl: "", mediaType: "", mediaFilename: "" };
 }
 
 function historyKey({ userId, roomId, clientId }) {
@@ -527,6 +629,7 @@ async function appendRawMessage({ userId, roomId, clientId, message }) {
     replyPreview: message.replyPreview ? compactReplyPreview(message.replyPreview) : null,
     mediaUrl: message.mediaUrl || null,
     mediaType: message.mediaType || null,
+    mediaFilename: message.mediaFilename || null,
     _idx: nextIdx,
   };
 
@@ -938,11 +1041,13 @@ wss.on("connection", (clientWs, req) => {
       ? pending.mediaUrls.map((item) => String(item || "").trim()).filter(Boolean)
       : [];
     const incomingMediaType = String(pending.mediaType || "").trim();
+    const incomingMediaFilename = String(pending.mediaFilename || pending.filename || pending.name || "").trim();
     const incomingMediaDataUrl = String(pending.mediaDataUrl || "").trim();
     const textHasMediaToken = /MEDIA\s*:/i.test(text);
-    const textMediaRefs = Array.from(text.matchAll(/MEDIA\s*:\s*(data:(?:image|video)\/[^\s"')]+|https?:\/\/[^\s"')]+)/gi), (m) => String(m[1] || "").trim()).filter(Boolean);
+    const textMediaRefs = extractMediaRefsFromText(text);
     let mediaUrl = incomingMediaUrl || incomingMediaUrls[0] || "";
-    let mediaType = incomingMediaType || guessRenderableMediaType(mediaUrl) || "";
+    let mediaType = incomingMediaType || guessMediaTypeFromRef(mediaUrl) || "";
+    let mediaFilename = incomingMediaFilename || guessFilenameFromRef(mediaUrl) || "";
 
     log("info", "assistant_frame", {
       userId: state.session.userId,
@@ -962,24 +1067,51 @@ wss.on("connection", (clientWs, req) => {
       keys: Array.from(pending.keys),
     });
 
+    if (mediaUrl && !/^https?:\/\//i.test(mediaUrl)) {
+      try {
+        const resolved = await resolveAssistantMediaRef(mediaUrl, req.headers.host, mediaFilename, mediaType);
+        mediaUrl = resolved.mediaUrl || mediaUrl;
+        mediaType = resolved.mediaType || mediaType;
+        mediaFilename = resolved.mediaFilename || mediaFilename;
+      } catch (error) {
+        log("warn", "assistant_media_resolve_failed", {
+          userId: state.session.userId,
+          roomId: state.session.roomId,
+          clientId: state.session.clientId,
+          error: String(error?.message || error),
+        });
+      }
+    }
+
     if (!mediaUrl && textMediaRefs.length > 0) {
-      const ref = textMediaRefs[0];
-      const probedType = guessRenderableMediaType(ref) || (await probeRenderableMediaType(ref));
-      if (isRenderableMediaType(probedType)) {
-        mediaUrl = ref;
-        mediaType = probedType;
+      try {
+        const resolved = await resolveAssistantMediaRef(textMediaRefs[0], req.headers.host, mediaFilename, mediaType);
+        mediaUrl = resolved.mediaUrl || "";
+        mediaType = resolved.mediaType || mediaType;
+        mediaFilename = resolved.mediaFilename || mediaFilename;
+      } catch (error) {
+        log("warn", "assistant_text_media_resolve_failed", {
+          userId: state.session.userId,
+          roomId: state.session.roomId,
+          clientId: state.session.clientId,
+          error: String(error?.message || error),
+        });
       }
     }
 
     if (!mediaType && mediaUrl) {
-      mediaType = guessRenderableMediaType(mediaUrl) || (await probeRenderableMediaType(mediaUrl));
+      mediaType = guessMediaTypeFromRef(mediaUrl) || (await probeMediaType(mediaUrl));
+    }
+    if (!mediaFilename && mediaUrl) {
+      mediaFilename = guessFilenameFromRef(mediaUrl) || mediaFilename;
     }
 
     if (!mediaUrl && incomingMediaDataUrl) {
       try {
-        const saved = saveDataUrlImage(incomingMediaDataUrl, "assistant-image.png");
-        mediaUrl = buildAbsoluteMediaUrl(req.headers.host, saved.relUrl);
-        mediaType = saved.mime;
+        const resolved = await resolveAssistantMediaRef(incomingMediaDataUrl, req.headers.host, mediaFilename || "assistant-attachment.bin", mediaType);
+        mediaUrl = resolved.mediaUrl || "";
+        mediaType = resolved.mediaType || mediaType;
+        mediaFilename = resolved.mediaFilename || mediaFilename;
       } catch (error) {
         log("warn", "assistant_media_save_failed", {
           userId: state.session.userId,
@@ -1008,6 +1140,7 @@ wss.on("connection", (clientWs, req) => {
           replyPreview: pending.replyPreview || undefined,
           mediaUrl: mediaUrl || undefined,
           mediaType: mediaType || undefined,
+          mediaFilename: mediaFilename || undefined,
         },
       });
     }
@@ -1020,6 +1153,7 @@ wss.on("connection", (clientWs, req) => {
       text,
       mediaUrl: mediaUrl || undefined,
       mediaType: mediaType || undefined,
+      mediaFilename: mediaFilename || undefined,
       replyTo: pending.replyTo ?? turnId ?? undefined,
       replyPreview: pending.replyPreview || undefined,
     });
@@ -1036,6 +1170,7 @@ wss.on("connection", (clientWs, req) => {
       mediaUrl: "",
       mediaUrls: [],
       mediaType: "",
+      mediaFilename: "",
       mediaDataUrl: "",
       replyTo: frame.replyTo ?? frame.parentId ?? turnId ?? undefined,
       replyPreview: frame.replyPreview ? compactReplyPreview(String(frame.replyPreview)) : "",
@@ -1062,6 +1197,9 @@ wss.on("connection", (clientWs, req) => {
 
     const nextMediaType = String(frame.mediaType || "").trim();
     if (nextMediaType && !current.mediaType) current.mediaType = nextMediaType;
+
+    const nextMediaFilename = String(frame.mediaFilename || frame.filename || frame.name || "").trim();
+    if (nextMediaFilename && !current.mediaFilename) current.mediaFilename = nextMediaFilename;
 
     const nextMediaDataUrl = String(frame.mediaDataUrl || "").trim();
     if (nextMediaDataUrl && !current.mediaDataUrl) current.mediaDataUrl = nextMediaDataUrl;

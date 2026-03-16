@@ -627,7 +627,7 @@ button {
 
 .composer-row {
   display: grid;
-  grid-template-columns: auto auto minmax(0, 1fr) auto;
+  grid-template-columns: auto minmax(0, 1fr) auto;
   gap: 10px;
   align-items: end;
 }
@@ -838,6 +838,7 @@ button {
   position: fixed;
   z-index: 70;
   min-width: 154px;
+  max-width: min(220px, calc(100vw - 16px));
   padding: 8px;
   border-radius: 18px;
   background: rgba(255, 255, 255, 0.98);
@@ -845,6 +846,7 @@ button {
   box-shadow: 0 16px 40px rgba(10, 18, 35, 0.16);
   display: grid;
   gap: 6px;
+  overflow: hidden;
 }
 
 .msg-menu button,
