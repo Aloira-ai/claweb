@@ -2,6 +2,22 @@
 
 All notable changes to this project will be documented in this file.
 
+## [0.2.1] - 2026-03-17
+
+### Added
+- Beginner-friendly setup guides in both English and Simplified Chinese.
+- Troubleshooting guides in both English and Simplified Chinese.
+
+### Changed
+- README onboarding flow now points first-time users to the setup/troubleshooting docs.
+- Repository positioning copy was updated to reflect the current public project shape more accurately.
+
+### Fixed
+- Frontdoor assistant replies now infer timestamps from pending turn context instead of always falling back to `Date.now()`, improving reply persistence and history ordering stability.
+
+### Notes
+- This is a documentation + onboarding + frontdoor stability follow-up release on top of `0.2.0`, not a scope reset.
+
 ## [0.2.0] - 2026-03-13
 
 ### Added
