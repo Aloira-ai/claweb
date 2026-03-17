@@ -460,6 +460,27 @@ function historyKey({ userId, roomId, clientId }) {
   return [safeFileSegment(userId), safeFileSegment(roomId || "direct"), safeFileSegment(clientId)].join("__");
 }
 
+function inferAssistantTimestamp(pending) {
+  const directTs = Number(pending?.frame?.timestamp || pending?.frame?.ts || 0);
+  if (directTs > 0) return directTs;
+
+  const turnId = String(pending?.turnId || pending?.frame?.id || "").trim();
+  if (turnId) {
+    const parts = turnId.split(":");
+    const tail = Number(parts[parts.length - 1] || 0);
+    if (tail > 0) return tail;
+  }
+
+  const replyTo = String(pending?.replyTo || pending?.frame?.replyTo || pending?.frame?.parentId || "").trim();
+  if (replyTo) {
+    const parts = replyTo.split(":");
+    const tail = Number(parts[parts.length - 1] || 0);
+    if (tail > 0) return tail;
+  }
+
+  return Date.now();
+}
+
 function compactReplyPreview(text, maxLen = 72) {
   const compact = String(text || "")
     .replace(/\r\n?/g, "\n")
@@ -1159,7 +1180,7 @@ wss.on("connection", (clientWs, req) => {
         message: {
           role: "assistant",
           text,
-          ts: Date.now(),
+          ts: inferAssistantTimestamp(pending),
           messageId: asstMessageId,
           replyTo: turnId,
           replyPreview: pending.replyPreview || undefined,
