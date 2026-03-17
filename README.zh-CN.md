@@ -7,11 +7,16 @@
 ![Runtime](https://img.shields.io/badge/runtime-OpenClaw%20channel-7c3aed)
 ![Client](https://img.shields.io/badge/client-browser%20reference-2563eb)
 
-**CLAWeb 是 OpenClaw 的一个面向客户端接入的 channel，并附带一个浏览器参考客户端。**
+**CLAWeb 是一个面向客户端接入的 OpenClaw channel，附带浏览器参考客户端和参考 access host。**
 
-它的核心思路是：**把路由、会话流、reply 流、记忆策略继续留在 OpenClaw 内部**，而对外提供一个可被 Web、App、PC 客户端等形态共同消费的 channel 表面。
+它的核心思路是：**把路由、会话流、reply 流、记忆策略继续留在 OpenClaw 内部**，而对外提供一个可被 Web、App、PC 客户端等形态共同消费的客户端接入表面。
 
-这个仓库里的浏览器 UI 只是 **第一个参考客户端**，不是 CLAWeb 的全部边界。
+如果你是第一次了解这个项目，可以先这样理解：
+
+- **OpenClaw** 负责路由、prompt、记忆和 agent 行为
+- **CLAWeb** 负责定义面向客户端的接入契约
+- **`access/frontdoor/`** 是 `/login`、`/history`、`/ws` 的参考宿主
+- **`clients/browser/`** 是第一个参考客户端，不是产品边界的全部
 
 ## 为什么会有 CLAWeb
 
@@ -93,26 +98,40 @@ CLAWeb 解决的是这层空档：
 
 ## 快速开始
 
-1. 安装依赖：
+如果你是第一次接触 CLAWeb，建议先看这两份文档：
+
+- **一步一步搭建指南**：[`docs/setup-guide.zh-CN.md`](./docs/setup-guide.zh-CN.md)
+- **常见问题排查**：[`docs/troubleshooting.zh-CN.md`](./docs/troubleshooting.zh-CN.md)
+
+本地最短路径可以理解为：
+
+1. 安装依赖并做静态检查：
    ```bash
    npm install
-   ```
-2. 运行静态检查：
-   ```bash
    npm run typecheck
    ```
-3. 在 OpenClaw profile 中加载插件。
-4. 参考 [`examples/openclaw.config.example.jsonc`](./examples/openclaw.config.example.jsonc) 配置 `channels.claweb`。
-5. 二选一：
-   - 用你自己的 Web 服务托管 `clients/browser/`
-   - 或直接使用 `access/frontdoor/` 参考宿主
-6. 接好这些接口：
-   - `POST /claweb/login`
-   - `GET /claweb/history`
-   - `WS /claweb/ws`
+2. 把当前仓库作为 OpenClaw 插件安装并启用：
+   ```bash
+   openclaw plugins install /path/to/claweb --link
+   openclaw plugins enable claweb
+   ```
+3. 参考 [`examples/openclaw.config.example.jsonc`](./examples/openclaw.config.example.jsonc) 配置 `channels.claweb`。
+4. 启动 [`access/frontdoor/`](./access/frontdoor/) 里的参考 access host。
+5. 打开浏览器 UI，并确认这些标准接口可用：
+   - `GET /`
+   - `POST /login`
+   - `GET /history`
+   - `WS /ws`
+
+兼容别名接口也可以存在：
+- `POST /claweb/login`
+- `GET /claweb/history`
+- `WS /claweb/ws`
 
 ## 文档入口
 
+- 搭建指南（一步一步）：[`docs/setup-guide.zh-CN.md`](./docs/setup-guide.zh-CN.md)
+- 常见问题排查：[`docs/troubleshooting.zh-CN.md`](./docs/troubleshooting.zh-CN.md)
 - 架构分层：[`docs/channel-architecture.md`](./docs/channel-architecture.md)
 - Channel 协议约定：[`docs/channel-contract.md`](./docs/channel-contract.md)
 - 浏览器客户端接入约定：[`docs/browser-client-integration.md`](./docs/browser-client-integration.md)

@@ -7,11 +7,16 @@
 ![Runtime](https://img.shields.io/badge/runtime-OpenClaw%20channel-7c3aed)
 ![Client](https://img.shields.io/badge/client-browser%20reference-2563eb)
 
-**CLAWeb is an OpenClaw client-facing channel with a browser reference client.**
+**CLAWeb is a client-facing OpenClaw channel for web-style chat entry, with a browser reference client and a reference access host.**
 
-It keeps routing, session flow, reply flow, and memory strategy inside OpenClaw while exposing a channel surface that can be consumed by web, app, desktop, or other clients.
+It keeps routing, session flow, reply flow, and memory strategy inside OpenClaw, while exposing a client-facing surface that can be consumed by web, app, desktop, or other clients.
 
-The browser UI in this repository is the **first reference client**, not the full product boundary.
+If you are evaluating the project for the first time, the shortest useful summary is:
+
+- **OpenClaw** owns routing, prompts, memory, and agent behavior
+- **CLAWeb** defines the client-facing contract
+- **`access/frontdoor/`** is the reference host for `/login`, `/history`, and `/ws`
+- **`clients/browser/`** is the first reference client, not the full product boundary
 
 ## Why CLAWeb exists
 
@@ -93,26 +98,40 @@ This directory is for example configs and sample data only.
 
 ## Quick start
 
+If you are new to CLAWeb, start here first:
+
+- **Step-by-step setup guide:** [`docs/setup-guide.md`](./docs/setup-guide.md)
+- **Troubleshooting:** [`docs/troubleshooting.md`](./docs/troubleshooting.md)
+
+The shortest local path is:
+
 1. Install dependencies:
    ```bash
    npm install
-   ```
-2. Run static checks:
-   ```bash
    npm run typecheck
    ```
-3. Load the plugin from your OpenClaw profile.
-4. Configure `channels.claweb` using [`examples/openclaw.config.example.jsonc`](./examples/openclaw.config.example.jsonc).
-5. Either:
-   - serve `clients/browser/` from your own web server, or
-   - use the reference access host in `access/frontdoor/`
-6. Wire these endpoints:
-   - `POST /claweb/login`
-   - `GET /claweb/history`
-   - `WS /claweb/ws`
+2. Install and enable the plugin in OpenClaw:
+   ```bash
+   openclaw plugins install /path/to/claweb --link
+   openclaw plugins enable claweb
+   ```
+3. Configure `channels.claweb` using [`examples/openclaw.config.example.jsonc`](./examples/openclaw.config.example.jsonc).
+4. Start the reference access host in [`access/frontdoor/`](./access/frontdoor/).
+5. Open the browser UI and verify the canonical routes:
+   - `GET /`
+   - `POST /login`
+   - `GET /history`
+   - `WS /ws`
+
+Compatibility aliases may also exist:
+- `POST /claweb/login`
+- `GET /claweb/history`
+- `WS /claweb/ws`
 
 ## Start here in the docs
 
+- Setup guide (step-by-step): [`docs/setup-guide.md`](./docs/setup-guide.md)
+- Troubleshooting: [`docs/troubleshooting.md`](./docs/troubleshooting.md)
 - Architecture: [`docs/channel-architecture.md`](./docs/channel-architecture.md)
 - Channel contract: [`docs/channel-contract.md`](./docs/channel-contract.md)
 - Browser client integration: [`docs/browser-client-integration.md`](./docs/browser-client-integration.md)

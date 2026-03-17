@@ -1,5 +1,7 @@
 # CLAWeb Docs Index
 
+If you are here for the first time, start with the setup guide before reading the deeper architecture docs.
+
 This repository is organized around three primary layers:
 
 1. **Channel runtime**
@@ -8,6 +10,10 @@ This repository is organized around three primary layers:
 
 ## Start here
 
+- Setup guide (step-by-step, English): [`./setup-guide.md`](./setup-guide.md)
+- Setup guide（中文）: [`./setup-guide.zh-CN.md`](./setup-guide.zh-CN.md)
+- Troubleshooting (English): [`./troubleshooting.md`](./troubleshooting.md)
+- 常见问题排查（中文）: [`./troubleshooting.zh-CN.md`](./troubleshooting.zh-CN.md)
 - Architecture: [`./channel-architecture.md`](./channel-architecture.md)
 - Channel contract: [`./channel-contract.md`](./channel-contract.md)
 - Browser client integration: [`./browser-client-integration.md`](./browser-client-integration.md)
