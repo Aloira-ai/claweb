@@ -14,7 +14,7 @@
     "typecheck": "tsc -p tsconfig.json --noEmit"
   },
   "dependencies": {
-    "openclaw": "^2026.3.7",
+    "openclaw": "^2026.3.31",
     "ws": "^8.19.0"
   },
   "devDependencies": {
