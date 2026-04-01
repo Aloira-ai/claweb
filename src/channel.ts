@@ -1,10 +1,8 @@
 import { readFile } from "node:fs/promises";
 import type { ChannelPlugin, OpenClawConfig, PluginRuntime } from "openclaw/plugin-sdk";
-import {
-  buildChannelConfigSchema,
-  DEFAULT_ACCOUNT_ID,
-  waitUntilAbort,
-} from "openclaw/plugin-sdk";
+import { buildChannelConfigSchema } from "openclaw/plugin-sdk/channel-config-schema";
+import { DEFAULT_ACCOUNT_ID } from "openclaw/plugin-sdk/routing";
+import { waitUntilAbort } from "openclaw/plugin-sdk/channel-runtime";
 import { z } from "zod";
 import { buildInboundCtx } from "./inbound/build-ctx.js";
 import { createWsDeliver } from "./outbound/deliver.js";
